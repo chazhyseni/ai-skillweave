@@ -274,14 +274,14 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 
 ECC was originally built for Claude Code. **ai-skillweave extends it across every `ollama launch` harness:**
 
-| Harness | Skills | How they load |
-|---------|--------|--------------|
-| `ollama launch claude` | ~775 (all sources) | Injected via `--append-system-prompt-file` at startup |
-| `ollama launch openclaw` | 187 (183 ECC + 3 learned + extras) | Real `.md` file copies, YAML-sanitized for compatibility |
-| `ollama launch pi` | 187 (183 ECC + 3 learned + extras) | Symlinks to ECC skill dirs |
-| `ollama launch codex` | 230 (183 ECC + 46 native) | Symlinks + YAML-sanitized copies; 46 are native Codex skills |
+| Harness | Skill dirs | How they load |
+|---------|-----------|--------------|
+| `ollama launch claude` | ~775 .md files | All content injected via `--append-system-prompt-file` at startup |
+| `ollama launch openclaw` | **244** (183 ECC + 17 Anthropic + 44 Codex curated) | Real `.md` file copies, YAML-sanitized for compatibility |
+| `ollama launch pi` | **244** (183 ECC + 17 Anthropic + 44 Codex curated) | Symlinks to all skill source dirs |
+| `ollama launch codex` | **~289** (244 unified + 46 native Codex) | Symlinks + YAML-sanitized copies |
 
-> **YAML sanitization:** ECC skills with block-scalar descriptions or extra metadata fields (`homepage`, `license`, `version`) are automatically sanitized on-the-fly for OpenClaw and Codex compatibility without modifying the source files.
+> **YAML sanitization:** Skills with block-scalar descriptions or extra metadata fields (`homepage`, `license`, `version`, `metadata`) are automatically sanitized on-the-fly for OpenClaw and Codex compatibility without modifying source files.
 
 ### Cross-Harness Skill Sync
 

@@ -258,65 +258,101 @@ def needs_sanitize(path):
     fields = re.findall(r"^([a-z_]+):", fm, re.MULTILINE)
     return bool(set(fields) - ALLOWED_FIELDS)
 
+curated_dir = os.path.join(home, ".claude-curated-skills")
+anthropic_skills_dir = os.path.join(curated_dir, "anthropic-official", "skills")
+codex_curated_dir = os.path.join(curated_dir, "openai-codex", "skills")
+
+# Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated
+def collect_skill_dirs(base_dir):
+    """Return {skill_name: skill_dir_path} for all dirs containing SKILL.md (any depth)."""
+    result = {}
+    if not os.path.isdir(base_dir):
+        return result
+    for dirpath, dirnames, filenames in os.walk(base_dir):
+        if "SKILL.md" in filenames:
+            skill_name = os.path.basename(dirpath)
+            # Use full path as key when there's a collision (keep first found)
+            if skill_name not in result:
+                result[skill_name] = dirpath
+    return result
+
+ecc_skills = collect_skill_dirs(ecc_dir)
+anthropic_skills = collect_skill_dirs(anthropic_skills_dir)
+codex_curated_skills = collect_skill_dirs(codex_curated_dir)
+
+# Merge all sources (ECC has priority over curated on name conflicts)
+all_skills = {}
+all_skills.update(codex_curated_skills)   # lowest priority
+all_skills.update(anthropic_skills)       # medium priority
+all_skills.update(ecc_skills)             # highest priority (ECC wins)
+
 stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}}
 
-# --- OpenClaw: real file copies (sanitized where needed) ---
+def sync_to_harness_real(skill_name, skill_dir, dest_dir):
+    """Sync a skill dir to a harness dir (real file copies, sanitized)."""
+    src = os.path.join(skill_dir, "SKILL.md")
+    if not os.path.exists(src):
+        return False
+    dst_dir = os.path.join(dest_dir, skill_name)
+    dst = os.path.join(dst_dir, "SKILL.md")
+    src_mtime = os.path.getmtime(src)
+    dst_mtime = os.path.getmtime(dst) if os.path.exists(dst) else 0
+    if src_mtime > dst_mtime:
+        os.makedirs(dst_dir, exist_ok=True)
+        if needs_sanitize(src):
+            with open(dst, "w") as f:
+                f.write(sanitize_skill_md(src))
+        else:
+            shutil.copy2(src, dst)
+        return True
+    return False
+
+def sync_to_harness_symlink_or_sanitize(skill_name, skill_dir, dest_dir):
+    """Sync a skill to harness: symlink if clean YAML, sanitized copy if not."""
+    src = os.path.join(skill_dir, "SKILL.md")
+    if not os.path.exists(src):
+        return False
+    dst_path = os.path.join(dest_dir, skill_name)
+    if not os.path.exists(dst_path):
+        if needs_sanitize(src):
+            os.makedirs(dst_path, exist_ok=True)
+            with open(os.path.join(dst_path, "SKILL.md"), "w") as f:
+                f.write(sanitize_skill_md(src))
+        else:
+            os.symlink(skill_dir, dst_path)
+        return True
+    return False
+
+# --- OpenClaw: real file copies (sanitized) for all skill sources ---
 if os.path.isdir(os.path.join(home, ".openclaw", "workspace")):
     os.makedirs(openclaw_ws, exist_ok=True)
-    for skill_name in os.listdir(ecc_dir):
-        src = os.path.join(ecc_dir, skill_name, "SKILL.md")
-        if not os.path.exists(src):
-            continue  # skip 'learned' dir and others without SKILL.md
-        dst_dir = os.path.join(openclaw_ws, skill_name)
-        dst = os.path.join(dst_dir, "SKILL.md")
-        src_mtime = os.path.getmtime(src)
-        dst_mtime = os.path.getmtime(dst) if os.path.exists(dst) else 0
-        if src_mtime > dst_mtime:
-            os.makedirs(dst_dir, exist_ok=True)
-            if needs_sanitize(src):
-                with open(dst, "w") as f:
-                    f.write(sanitize_skill_md(src))
-            else:
-                shutil.copy2(src, dst)
+    for skill_name, skill_dir in all_skills.items():
+        if sync_to_harness_real(skill_name, skill_dir, openclaw_ws):
             stats["openclaw"]["updated"] += 1
     stats["openclaw"]["total"] = len([d for d in os.listdir(openclaw_ws) if os.path.isdir(os.path.join(openclaw_ws, d))])
 
-# --- Pi: real file copies (Pi handles more YAML but use same sanitization for safety) ---
+# --- Pi: symlinks for all skill sources ---
 if os.path.isdir(os.path.join(home, ".pi", "agent")):
     os.makedirs(pi_skills, exist_ok=True)
-    for skill_name in os.listdir(ecc_dir):
-        src = os.path.join(ecc_dir, skill_name, "SKILL.md")
-        if not os.path.exists(src):
-            continue
-        dst_dir = os.path.join(pi_skills, skill_name)
-        dst_skill = os.path.join(dst_dir, "SKILL.md")
-        # Pi uses symlinks — check if symlink exists
-        if not os.path.exists(os.path.join(pi_skills, skill_name)):
-            os.symlink(os.path.join(ecc_dir, skill_name), os.path.join(pi_skills, skill_name))
+    for skill_name, skill_dir in all_skills.items():
+        target = os.path.join(pi_skills, skill_name)
+        if not os.path.exists(target):
+            os.symlink(skill_dir, target)
             stats["pi"]["added"] += 1
     stats["pi"]["total"] = len(os.listdir(pi_skills))
 
-# --- Codex: symlinks where compatible, sanitized real files where not ---
+# --- Codex: symlinks where clean, sanitized copies where needed ---
 if os.path.isdir(os.path.join(home, ".codex")):
     os.makedirs(codex_skills, exist_ok=True)
-    for skill_name in os.listdir(ecc_dir):
-        src = os.path.join(ecc_dir, skill_name, "SKILL.md")
-        if not os.path.exists(src):
-            continue
-        dst_path = os.path.join(codex_skills, skill_name)
-        if not os.path.exists(dst_path):
-            if needs_sanitize(src):
-                # Write sanitized real directory
-                os.makedirs(dst_path, exist_ok=True)
-                with open(os.path.join(dst_path, "SKILL.md"), "w") as f:
-                    f.write(sanitize_skill_md(src))
-            else:
-                os.symlink(os.path.join(ecc_dir, skill_name), dst_path)
+    for skill_name, skill_dir in all_skills.items():
+        if sync_to_harness_symlink_or_sanitize(skill_name, skill_dir, codex_skills):
             stats["codex"]["added"] += 1
     stats["codex"]["total"] = len(os.listdir(codex_skills))
 
-print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated, all 156 ECC skills including sanitized)")
-print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new links)")
+total = len(all_skills)
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
+print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")
 PYEOF
 
