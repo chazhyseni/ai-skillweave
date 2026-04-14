@@ -36,6 +36,13 @@
       "command": "node",
       "args": ["{{HOME}}/mcp-servers/google-docs-editor/build/index.js"],
       "env": {}
+    },
+    "token-optimizer": {
+      "command": "npx",
+      "args": ["-y", "token-optimizer-mcp"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
     }
   },
 
