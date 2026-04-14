@@ -42,7 +42,7 @@ ollama launch codex       # Codex via Ollama backend
 
 | Component | What it configures |
 |-----------|-------------------|
-| **Claude Code MCP** | Adds `memory`, `sequential-thinking`, `context7`, `playwright`, `google-docs-editor` to `~/.claude.json` |
+| **Claude Code MCP** | Adds 6 servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer |
 | **OpenClaw** | Enables web tools + Ollama plugin in `~/.openclaw/openclaw.json` |
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
 | **Codex** | Configures `ollama-launch` provider in `~/.codex/config.toml` |
@@ -132,7 +132,9 @@ agent_harness_modifications/
 
 ## MCP Servers (Claude Code)
 
-These are automatically configured by `scripts/setup-mcp.sh`:
+### Automatically applied by `./install.sh` (no API keys needed)
+
+`scripts/setup-mcp.sh` reads `configs/claude-mcp-servers.json` and merges these into `~/.claude.json`:
 
 | Server | What it does |
 |--------|-------------|
@@ -141,23 +143,29 @@ These are automatically configured by `scripts/setup-mcp.sh`:
 | `context7` | Live docs lookup for any library/framework |
 | `playwright` | Browser automation from within Claude Code |
 | `google-docs-editor` | Read/write Google Docs (local server, pre-built) |
+| `token-optimizer` | 95%+ context reduction via deduplication — saves Opus tokens |
 
-### Adding API-Key-Gated Servers
+**No tokens or API keys needed for any of the above.** `install.sh` applies them automatically on a new machine.
 
-1. Copy an entry from `configs/claude-mcp-servers.json` (`_api_key_servers_commented` section)
-2. Move it to the `mcpServers` block
-3. Fill in your API key
-4. Run `scripts/setup-mcp.sh --force`
+### Manually added (require API keys)
 
-Or use the Claude Code CLI:
+The `_api_key_servers_commented` block in `configs/claude-mcp-servers.json` contains templates that are **never auto-applied** — you fill them in and add them yourself:
+
 ```bash
-# GitHub
-claude mcp add github -e GITHUB_PERSONAL_ACCESS_TOKEN=ghp_xxx \
+# GitHub (needs a PAT from github.com/settings/tokens)
+claude mcp add github \
+  -e GITHUB_PERSONAL_ACCESS_TOKEN=ghp_YOUR_TOKEN \
+  --scope user \
   -- npx -y @modelcontextprotocol/server-github
 
-# Exa web search
-claude mcp add exa -e EXA_API_KEY=exa_xxx -- npx -y exa-mcp-server
+# Exa web search (needs key from exa.ai)
+claude mcp add exa \
+  -e EXA_API_KEY=exa_xxx \
+  --scope user \
+  -- npx -y exa-mcp-server
 ```
+
+To add a server from the template: copy it from `_api_key_servers_commented` → move it to `mcpServers` → fill in the real key → run `scripts/setup-mcp.sh --force`.
 
 ---
 
