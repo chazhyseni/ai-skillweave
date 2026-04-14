@@ -73,6 +73,7 @@ agent_harness_modifications/
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
 │   ├── setup-codex.sh            ← Apply Codex config
 │   ├── setup-pi.sh               ← Apply Pi settings
+│   ├── update-ecc.sh             ← Pull latest ECC + rebuild cache + re-sync harnesses
 │   ├── disable-zscaler.sh        ← Disable Zscaler proxy
 │   └── verify.sh                 ← Health check all components
 │
@@ -204,6 +205,16 @@ Learned skills live in `~/.claude/skills/learned/` and are automatically propaga
 ```bash
 ./safe-install.sh                  # ECC only
 ./safe-install.sh --with-curated   # ECC + Anthropic official + community skills
+```
+
+### Keeping ECC Up to Date
+
+When ECC adds new skills upstream, pull and rebuild without a full re-install:
+
+```bash
+scripts/update-ecc.sh           # Pull latest + rebuild cache + re-sync all harnesses
+scripts/update-ecc.sh --check   # Just check if updates are available
+scripts/update-ecc.sh --force   # Force cache rebuild even if already up to date
 ```
 
 ---
