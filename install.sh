@@ -1,4 +1,4 @@
-F#!/bin/bash
+#!/bin/bash
 # =============================================================================
 # install.sh — Master setup for Ollama Agent Harness
 # =============================================================================
@@ -115,6 +115,14 @@ if ! $SKIP_SKILLS && should_run "skills"; then
     bash "$REPO_DIR/safe-install.sh" && success "ECC skills + shell wrappers installed" || warn "Skills install failed — continuing"
 else
     log "Skipping skills layer"
+fi
+
+# =============================================================================
+# Step 1b: Ollama integration→model mapping
+# =============================================================================
+if should_run "ollama" || [ -z "$ONLY_TARGET" ]; then
+    section "Ollama Integrations"
+    bash "$REPO_DIR/scripts/setup-ollama-config.sh" && success "Ollama integrations configured" || warn "Ollama config skipped (Ollama not started yet)"
 fi
 
 # =============================================================================

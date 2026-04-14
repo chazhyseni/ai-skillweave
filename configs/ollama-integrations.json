@@ -14,7 +14,7 @@
       "models": ["minimax-m2.7:cloud"]
     },
     "codex": {
-      "models": ["qwen3.5:397b-cloud"]
+      "models": ["minimax-m2.7:cloud"]
     },
     "openclaw": {
       "models": ["qwen3.5:397b-cloud"]

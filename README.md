@@ -73,6 +73,7 @@ agent_harness_modifications/
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
 │   ├── setup-codex.sh            ← Apply Codex config
 │   ├── setup-pi.sh               ← Apply Pi settings
+│   ├── setup-ollama-config.sh    ← Apply Ollama integration→model mapping
 │   ├── update-ecc.sh             ← Pull latest ECC + rebuild cache + re-sync harnesses
 │   ├── disable-zscaler.sh        ← Disable Zscaler proxy
 │   └── verify.sh                 ← Health check all components
