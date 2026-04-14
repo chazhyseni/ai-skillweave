@@ -2,7 +2,17 @@
 
 > Weaving skills, MCP, and configs across every AI agent harness — `ollama launch claude`, `openclaw`, `pi`, `codex` — on any machine.
 
-One-command setup for all your Ollama agent harnesses: proper MCP servers, ECC skills, web tools, and network fixes, all portable and reproducible.
+One-command setup for all your Ollama agent harnesses: proper MCP servers, web tools, and harness-specific configs, all portable and reproducible.
+
+---
+
+## Built on Everything Claude Code (ECC)
+
+> **The skills powering this repo come from [Everything Claude Code](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of 1,789+ production-ready AI agent skills covering every domain of software development.
+
+`ai-skillweave`'s core contribution is **cross-harness delivery**: ECC was originally designed for Claude Code only. This repo extends it so the same skill library loads natively into every `ollama launch` agent — OpenClaw, Pi, Codex, and Claude Code — each in the format that harness expects.
+
+If you find the skills useful, go star ⭐ [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code).
 
 ---
 
@@ -38,7 +48,6 @@ ollama launch codex       # Codex via Ollama backend
 | **Codex** | Configures `ollama-launch` provider in `~/.codex/config.toml` |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.zshrc` |
 | **ECC Skills** | Installs 1,789+ Everything Claude Code skills for all harnesses |
-| **Zscaler** | Detects and disables proxy (prevents stream drops on cloud models) |
 
 ---
 
@@ -195,25 +204,6 @@ Learned skills live in `~/.claude/skills/learned/` and are automatically propaga
 ```bash
 ./safe-install.sh                  # ECC only
 ./safe-install.sh --with-curated   # ECC + Anthropic official + community skills
-```
-
----
-
-## Zscaler / Corporate Proxy
-
-If on a machine with Zscaler, the proxy **will drop long-running Ollama cloud streams**,
-killing subagents mid-generation. This repo handles it automatically:
-
-- `install.sh` auto-unloads the Zscaler tray (no sudo needed)
-- System daemons require manual sudo (see post-setup message)
-- All npx MCP servers have `NODE_EXTRA_CA_CERTS` configured for corporate CA bundles
-
-After reboot, Zscaler may restart. Run:
-```bash
-scripts/disable-zscaler.sh
-# Then in a Terminal (for sudo):
-sudo launchctl unload /Library/LaunchDaemons/com.zscaler.service.plist
-sudo launchctl unload /Library/LaunchDaemons/com.zscaler.tunnel.plist
 ```
 
 ---
