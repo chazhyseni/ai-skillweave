@@ -87,36 +87,68 @@ fi
 
 [[ "$*" == *"--check"* ]] && exit 0
 
+CURATED_DIR="$HOME/.claude-curated-skills"
+
 # =============================================================================
-# Step 2: Rebuild combined skills cache
+# Step 2: Rebuild combined skills cache (matches safe-install.sh priority order)
 # =============================================================================
 log "Rebuilding skills cache..."
 mkdir -p "$SKILLS_CACHE_DIR"
 > "$COMBINED_FILE"
 
-# Learned skills first (highest priority)
+_add_skill_file() {
+    echo "" >> "$COMBINED_FILE"
+    sed '1,/^---$/d' "$1" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+}
+
+# Priority 0: Learned skills (always first — your personal skills)
 LEARNED_DIR="$HOME/.claude/skills/learned"
 if [ -d "$LEARNED_DIR" ]; then
     LEARNED_COUNT=0
     for skill in "$LEARNED_DIR"/*.md; do
         [ -f "$skill" ] || continue
-        echo "" >> "$COMBINED_FILE"
-        cat "$skill" >> "$COMBINED_FILE"
+        _add_skill_file "$skill"
         LEARNED_COUNT=$((LEARNED_COUNT + 1))
     done
     [ $LEARNED_COUNT -gt 0 ] && success "Learned skills: $LEARNED_COUNT"
 fi
 
-# ECC skills
+# Priority 1: Anthropic Official (highest external quality)
+if [ -d "$CURATED_DIR/anthropic-official" ]; then
+    COUNT=0
+    while IFS= read -r -d '' skill; do
+        _add_skill_file "$skill"; COUNT=$((COUNT + 1))
+    done < <(find "$CURATED_DIR/anthropic-official" -name "*.md" -type f -print0 2>/dev/null)
+    [ $COUNT -gt 0 ] && success "Anthropic official skills: $COUNT"
+fi
+
+# Priority 2: OpenAI Codex skills (top 100 to keep context manageable)
+if [ -d "$CURATED_DIR/openai-codex" ]; then
+    COUNT=0
+    while IFS= read -r -d '' skill; do
+        [ $COUNT -ge 100 ] && break
+        _add_skill_file "$skill"; COUNT=$((COUNT + 1))
+    done < <(find "$CURATED_DIR/openai-codex" -name "*.md" -type f -print0 2>/dev/null)
+    [ $COUNT -gt 0 ] && success "OpenAI Codex skills: $COUNT"
+fi
+
+# Priority 3: ECC skills (the core library)
 if [ -d "$ECC_DIR/skills" ]; then
     SKILL_COUNT=0
     while IFS= read -r -d '' skill; do
-        echo "" >> "$COMBINED_FILE"
-        # Strip YAML frontmatter if present
-        sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
-        SKILL_COUNT=$((SKILL_COUNT + 1))
+        _add_skill_file "$skill"; SKILL_COUNT=$((SKILL_COUNT + 1))
     done < <(find "$ECC_DIR/skills" -name "*.md" -type f ! -path "*/learned/*" -print0 2>/dev/null)
-    success "ECC skills loaded: $SKILL_COUNT"
+    success "ECC skills: $SKILL_COUNT"
+fi
+
+# Priority 4: Community curated (top 50)
+if [ -d "$CURATED_DIR/community-curated" ]; then
+    COUNT=0
+    while IFS= read -r -d '' skill; do
+        [ $COUNT -ge 50 ] && break
+        _add_skill_file "$skill"; COUNT=$((COUNT + 1))
+    done < <(find "$CURATED_DIR/community-curated" -name "*.md" -type f -print0 2>/dev/null)
+    [ $COUNT -gt 0 ] && success "Community curated skills: $COUNT"
 fi
 
 CACHE_SIZE=$(wc -c < "$COMBINED_FILE" | tr -d ' ')
