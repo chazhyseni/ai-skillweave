@@ -1,4 +1,6 @@
-# Ollama Agent Harness Modifications
+# overclaw
+
+> *overclock × OpenClaw × overhaul* — supercharged setup for every Ollama agent harness
 
 One-command setup to configure all AI agent harnesses (`ollama launch claude`, `openclaw`, `pi`, `codex`) with proper MCP servers, skills, and network settings — reproducible across machines.
 
@@ -8,7 +10,7 @@ One-command setup to configure all AI agent harnesses (`ollama launch claude`, `
 
 ```bash
 # 1. Clone this repo
-git clone <your-repo-url> ~/scripts/agent_harness_modifications
+git clone https://github.com/chazhyseni/overclaw ~/scripts/agent_harness_modifications
 cd ~/scripts/agent_harness_modifications
 
 # 2. Install everything
