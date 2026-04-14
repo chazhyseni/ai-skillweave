@@ -113,26 +113,29 @@ if [ -d "$LEARNED_DIR" ]; then
     [ $LEARNED_COUNT -gt 0 ] && success "Learned skills: $LEARNED_COUNT"
 fi
 
-# Priority 1: Anthropic Official (highest external quality)
-if [ -d "$CURATED_DIR/anthropic-official" ]; then
+# Priority 1: Anthropic Official — skills are in the skills/ subdirectory
+# Excludes README.md, THIRD_PARTY_NOTICES.md, and template/spec docs
+ANTHROPIC_SKILLS_DIR="$CURATED_DIR/anthropic-official/skills"
+if [ -d "$ANTHROPIC_SKILLS_DIR" ]; then
     COUNT=0
     while IFS= read -r -d '' skill; do
         _add_skill_file "$skill"; COUNT=$((COUNT + 1))
-    done < <(find "$CURATED_DIR/anthropic-official" -name "*.md" -type f -print0 2>/dev/null)
+    done < <(find "$ANTHROPIC_SKILLS_DIR" -name "*.md" -type f ! -name "README.md" -print0 2>/dev/null)
     [ $COUNT -gt 0 ] && success "Anthropic official skills: $COUNT"
 fi
 
-# Priority 2: OpenAI Codex skills (top 100 to keep context manageable)
-if [ -d "$CURATED_DIR/openai-codex" ]; then
+# Priority 2: OpenAI Codex — skills are in the skills/ subdirectory (470 total, cap at 100)
+CODEX_SKILLS_DIR="$CURATED_DIR/openai-codex/skills"
+if [ -d "$CODEX_SKILLS_DIR" ]; then
     COUNT=0
     while IFS= read -r -d '' skill; do
         [ $COUNT -ge 100 ] && break
         _add_skill_file "$skill"; COUNT=$((COUNT + 1))
-    done < <(find "$CURATED_DIR/openai-codex" -name "*.md" -type f -print0 2>/dev/null)
-    [ $COUNT -gt 0 ] && success "OpenAI Codex skills: $COUNT"
+    done < <(find "$CODEX_SKILLS_DIR" -name "*.md" -type f ! -name "README.md" ! -name "contributing.md" -print0 2>/dev/null)
+    [ $COUNT -gt 0 ] && success "OpenAI Codex skills: $COUNT (of 470 available)"
 fi
 
-# Priority 3: ECC skills (the core library)
+# Priority 3: ECC skills (the core library — SKILL.md files)
 if [ -d "$ECC_DIR/skills" ]; then
     SKILL_COUNT=0
     while IFS= read -r -d '' skill; do
@@ -141,14 +144,19 @@ if [ -d "$ECC_DIR/skills" ]; then
     success "ECC skills: $SKILL_COUNT"
 fi
 
-# Priority 4: Community curated (top 50)
-if [ -d "$CURATED_DIR/community-curated" ]; then
+# Priority 4: Community curated
+# Note: ~/.claude-curated-skills/community-curated/ is a web skills catalog (README only)
+# Actual community skill files would go in a skills/ subdir if present
+COMMUNITY_SKILLS_DIR="$CURATED_DIR/community-curated/skills"
+if [ -d "$COMMUNITY_SKILLS_DIR" ]; then
     COUNT=0
     while IFS= read -r -d '' skill; do
         [ $COUNT -ge 50 ] && break
         _add_skill_file "$skill"; COUNT=$((COUNT + 1))
-    done < <(find "$CURATED_DIR/community-curated" -name "*.md" -type f -print0 2>/dev/null)
+    done < <(find "$COMMUNITY_SKILLS_DIR" -name "*.md" -type f ! -name "README.md" -print0 2>/dev/null)
     [ $COUNT -gt 0 ] && success "Community curated skills: $COUNT"
+else
+    log "Community curated: catalog-only (no skill files installed)"
 fi
 
 CACHE_SIZE=$(wc -c < "$COMBINED_FILE" | tr -d ' ')

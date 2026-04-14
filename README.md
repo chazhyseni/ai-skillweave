@@ -184,11 +184,11 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 | Source | Skills | Notes |
 |--------|--------|-------|
 | ECC core | 156 SKILL.md | 157 dirs, 1 is `learned` storage |
-| Anthropic official | 72 | Installed via `safe-install.sh --with-curated` |
-| OpenAI Codex | 535 available, 100 loaded | Capped to manage context window size |
-| Community curated | 1 | |
+| Anthropic official | 64 | Actual skills in `anthropic-official/skills/` subdir |
+| OpenAI Codex | 470 available, 100 loaded | In `openai-codex/skills/`; capped to manage context size |
+| Community curated | 0 (catalog only) | The repo is a web-based skill index, not loadable files |
 | Personal learned | varies | Your own patterns extracted from sessions |
-| **Claude Code cache total** | **~391 files → 1.2MB** | Combined into `combined-skills.txt` |
+| **Claude Code cache total** | **~379 files → 1.1MB** | Combined into `combined-skills.txt` |
 
 ### What ai-skillweave Adds
 
