@@ -1,8 +1,8 @@
-# overclaw
+# ai-skillweave
 
-> *overclock × OpenClaw × overhaul* — supercharged setup for every Ollama agent harness
+> Weaving skills, MCP, and configs across every AI agent harness — `ollama launch claude`, `openclaw`, `pi`, `codex` — on any machine.
 
-One-command setup to configure all AI agent harnesses (`ollama launch claude`, `openclaw`, `pi`, `codex`) with proper MCP servers, skills, and network settings — reproducible across machines.
+One-command setup for all your Ollama agent harnesses: proper MCP servers, ECC skills, web tools, and network fixes, all portable and reproducible.
 
 ---
 
@@ -10,7 +10,7 @@ One-command setup to configure all AI agent harnesses (`ollama launch claude`, `
 
 ```bash
 # 1. Clone this repo
-git clone https://github.com/chazhyseni/overclaw ~/scripts/agent_harness_modifications
+git clone https://github.com/chazhyseni/ai-skillweave ~/scripts/agent_harness_modifications
 cd ~/scripts/agent_harness_modifications
 
 # 2. Install everything
