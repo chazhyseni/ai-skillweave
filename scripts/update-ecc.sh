@@ -134,15 +134,18 @@ if [ -d "$ANTHROPIC_SKILLS_DIR" ]; then
     [ $COUNT -gt 0 ] && success "Anthropic official skills: $COUNT"
 fi
 
-# Priority 2: OpenAI Codex — skills are in the skills/ subdirectory (470 total, cap at 100)
+# Priority 2: OpenAI Codex — skills are in the skills/ subdirectory (470 total, all loaded)
+# Note: previously capped at 100 to save context tokens. All 470 are now loaded.
+# If context window becomes an issue, set CAP=100 below.
 CODEX_SKILLS_DIR="$CURATED_DIR/openai-codex/skills"
+CAP=0  # 0 = no cap
 if [ -d "$CODEX_SKILLS_DIR" ]; then
     COUNT=0
     while IFS= read -r -d '' skill; do
-        [ $COUNT -ge 100 ] && break
+        [ $CAP -gt 0 ] && [ $COUNT -ge $CAP ] && break
         _add_skill_file "$skill"; COUNT=$((COUNT + 1))
     done < <(find "$CODEX_SKILLS_DIR" -name "*.md" -type f ! -name "README.md" ! -name "contributing.md" -print0 2>/dev/null)
-    [ $COUNT -gt 0 ] && success "OpenAI Codex skills: $COUNT (of 470 available)"
+    [ $COUNT -gt 0 ] && success "OpenAI Codex skills: $COUNT"
 fi
 
 # Priority 3: ECC skills (the core library — SKILL.md files)

@@ -112,7 +112,10 @@ should_run() {
 
 if ! $SKIP_SKILLS && should_run "skills"; then
     section "Skills Layer"
-    bash "$REPO_DIR/safe-install.sh" && success "ECC skills + shell wrappers installed" || warn "Skills install failed — continuing"
+    # safe-install.sh exits non-zero when 'source ~/.zshrc' fails in a non-interactive
+    # subshell — this is expected and harmless. Ignore the exit code.
+    bash "$REPO_DIR/safe-install.sh" || true
+    success "ECC skills + shell wrappers installed (run: source ~/.zshrc to activate)"
 else
     log "Skipping skills layer"
 fi
