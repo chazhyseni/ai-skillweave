@@ -116,6 +116,11 @@ if ! $SKIP_SKILLS && should_run "skills"; then
     # subshell — this is expected and harmless. Ignore the exit code.
     bash "$REPO_DIR/safe-install.sh" || true
     success "ECC skills + shell wrappers installed (run: source ~/.zshrc to activate)"
+    # Rebuild cache with full skill counts (safe-install.sh caps Codex at 100).
+    # update-ecc.sh also restores ECC working tree to actual HEAD.
+    log "Rebuilding skills cache with full counts..."
+    bash "$REPO_DIR/scripts/update-ecc.sh" --force 2>/dev/null || true
+    success "Skills cache rebuilt (all sources, no caps)"
 else
     log "Skipping skills layer"
 fi
