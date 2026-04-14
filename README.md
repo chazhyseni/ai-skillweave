@@ -236,15 +236,23 @@ scripts/update-ecc.sh --force   # Force cache rebuild even if already up to date
 
 All model names ending in `-cloud` or `:cloud` are Ollama cloud-hosted (no local GPU needed, but require internet):
 
-| Model | Type | Notes |
-|-------|------|-------|
-| `qwen3.5:397b-cloud` | ☁️ Cloud | High quality, ~1-5 min responses |
-| `qwen3.5:cloud` | ☁️ Cloud | Same endpoint as 397b-cloud |
-| `llama3.2:3b` | 💻 Local | Fast, ~5-10 sec responses |
-| `qwen2.5-coder:7b` | 💻 Local | Good for coding, ~30 sec responses |
+| Model | Type | Context | Best for |
+|-------|------|---------|---------|
+| `minimax-m2.7:cloud` | ☁️ Cloud | 1M tokens | Long context, multimodal, Claude Code / Cline |
+| `qwen3.5:397b-cloud` | ☁️ Cloud | 256K | Reasoning, complex tasks, OpenClaw / Pi / Codex |
+| `qwen3.5:cloud` | ☁️ Cloud | 256K | Same endpoint as 397b-cloud |
+| `qwen3.5-claude:latest` | ☁️ Cloud | 256K | Claude-optimized fine-tune |
+| `llama3.2:3b` | 💻 Local | 128K | Fast, ~5-10 sec, good for subagents |
+| `qwen2.5-coder:7b` | 💻 Local | 128K | Coding tasks, offline use |
 
-For subagent tasks that don't need maximum quality, use a local model:
 ```bash
+# Configure for Claude Code (large context tasks):
+./install.sh --model minimax-m2.7:cloud
+
+# Configure for OpenClaw / Pi / Codex (complex reasoning):
+./install.sh --model qwen3.5:397b-cloud
+
+# Add a local fallback model (no internet needed):
 ollama pull llama3.2:3b
 ./install.sh --model llama3.2:3b
 ```

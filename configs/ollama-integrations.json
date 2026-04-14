@@ -1,25 +1,35 @@
 {
   "_comment": "Ollama integration→model mapping. Installed to ~/.ollama/config.json by scripts/setup-ollama-config.sh",
-  "_placeholders": {
-    "{{OLLAMA_MODEL_LARGE}}": "large model e.g. qwen3.5:397b-cloud",
-    "{{OLLAMA_MODEL_SMALL}}": "fast model e.g. qwen3.5:cloud or llama3.2:3b"
+  "_note": "Replace {{OLLAMA_MODEL_*}} with actual model names, or use as-is for defaults",
+  "_defaults": {
+    "claude + cline": "minimax-m2.7:cloud (1M context, multimodal — best for long Claude Code sessions)",
+    "codex + openclaw + pi": "qwen3.5:397b-cloud (256K context, strong reasoning)"
   },
 
   "integrations": {
     "claude": {
-      "models": ["{{OLLAMA_MODEL_SMALL}}"]
+      "models": ["minimax-m2.7:cloud"]
     },
     "cline": {
-      "models": ["{{OLLAMA_MODEL_SMALL}}"]
+      "models": ["minimax-m2.7:cloud"]
     },
     "codex": {
-      "models": ["{{OLLAMA_MODEL_LARGE}}"]
+      "models": ["qwen3.5:397b-cloud"]
     },
     "openclaw": {
-      "models": ["{{OLLAMA_MODEL_LARGE}}"]
+      "models": ["qwen3.5:397b-cloud"]
     },
     "pi": {
-      "models": ["{{OLLAMA_MODEL_LARGE}}", "{{OLLAMA_MODEL_SMALL}}"]
+      "models": ["qwen3.5:397b-cloud", "qwen3.5:cloud"]
     }
+  },
+
+  "_available_models": {
+    "minimax-m2.7:cloud": "1M context, multimodal, ideal for long Claude Code sessions",
+    "qwen3.5:397b-cloud": "256K context, strong reasoning, best for OpenClaw/Pi/Codex",
+    "qwen3.5:cloud": "256K context, same endpoint as 397b-cloud",
+    "qwen3.5-claude:latest": "Claude-optimized fine-tune",
+    "llama3.2:3b": "local, fast (~5-10s), good for subagents",
+    "qwen2.5-coder:7b": "local, coding-focused, offline use"
   }
 }
