@@ -32,12 +32,31 @@ echo "║   ECC Skills Update                  ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 
-# Check ECC is installed
-[ -d "$ECC_DIR/.git" ] || error "ECC not installed. Run: ./safe-install.sh"
+ECC_REMOTE="https://github.com/affaan-m/everything-claude-code.git"
 
 # =============================================================================
-# Step 1: Pull latest ECC
+# Step 1: Ensure ECC is a git repo, then pull
 # =============================================================================
+
+if [ ! -d "$ECC_DIR" ]; then
+    error "ECC not installed. Run: ./safe-install.sh"
+fi
+
+if [ ! -d "$ECC_DIR/.git" ]; then
+    # ECC was installed by safe-install.sh (file copy, no .git) — add git tracking
+    warn "ECC directory has no git history. Converting to a tracked git repo..."
+    cd /tmp
+    rm -rf ecc-update-tmp
+    git clone --depth 1 "$ECC_REMOTE" ecc-update-tmp --quiet
+    # Copy .git into ECC dir so future pulls work
+    cp -r ecc-update-tmp/.git "$ECC_DIR/.git"
+    cd "$ECC_DIR"
+    # Mark all existing files as matching the current HEAD (avoid false diffs)
+    git reset HEAD --quiet 2>/dev/null || true
+    rm -rf /tmp/ecc-update-tmp
+    success "Git tracking initialized for $ECC_DIR"
+fi
+
 log "Checking for ECC updates..."
 cd "$ECC_DIR"
 
