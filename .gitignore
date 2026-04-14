@@ -1,0 +1,28 @@
+# Personal/machine-specific files
+.env
+.env.local
+*.env
+
+# Backup files created by setup scripts
+*.bak_*
+*.bak
+
+# Sync logs (regenerated automatically)
+shared-learnings/sync.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python

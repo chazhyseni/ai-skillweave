@@ -1,0 +1,25 @@
+{
+  "_comment": "Ollama integration→model mapping. Installed to ~/.ollama/config.json by scripts/setup-ollama-config.sh",
+  "_placeholders": {
+    "{{OLLAMA_MODEL_LARGE}}": "large model e.g. qwen3.5:397b-cloud",
+    "{{OLLAMA_MODEL_SMALL}}": "fast model e.g. qwen3.5:cloud or llama3.2:3b"
+  },
+
+  "integrations": {
+    "claude": {
+      "models": ["{{OLLAMA_MODEL_SMALL}}"]
+    },
+    "cline": {
+      "models": ["{{OLLAMA_MODEL_SMALL}}"]
+    },
+    "codex": {
+      "models": ["{{OLLAMA_MODEL_LARGE}}"]
+    },
+    "openclaw": {
+      "models": ["{{OLLAMA_MODEL_LARGE}}"]
+    },
+    "pi": {
+      "models": ["{{OLLAMA_MODEL_LARGE}}", "{{OLLAMA_MODEL_SMALL}}"]
+    }
+  }
+}

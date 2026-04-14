@@ -1,0 +1,68 @@
+{
+  "_comment": "MCP servers for Claude Code (~/.claude.json mcpServers key).",
+  "_install": "Run: scripts/setup-mcp.sh — merges these into ~/.claude.json automatically.",
+  "_note": "Add API-key servers by copying entries from ~/.claude-everything-claude-code/mcp-configs/mcp-servers.json",
+
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp", "--browser", "chrome"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "google-docs-editor": {
+      "command": "node",
+      "args": ["{{HOME}}/mcp-servers/google-docs-editor/build/index.js"],
+      "env": {}
+    }
+  },
+
+  "_api_key_servers_commented": {
+    "_note": "Uncomment + fill in API keys, then re-run setup-mcp.sh",
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_PAT_HERE"
+      }
+    },
+    "exa-web-search": {
+      "command": "npx",
+      "args": ["-y", "exa-mcp-server"],
+      "env": {
+        "EXA_API_KEY": "YOUR_EXA_API_KEY_HERE"
+      }
+    },
+    "jira": {
+      "command": "uvx",
+      "args": ["mcp-atlassian==0.21.0"],
+      "env": {
+        "JIRA_URL": "YOUR_JIRA_URL_HERE",
+        "JIRA_EMAIL": "YOUR_JIRA_EMAIL_HERE",
+        "JIRA_API_TOKEN": "YOUR_JIRA_API_TOKEN_HERE"
+      }
+    }
+  }
+}
