@@ -89,17 +89,87 @@ agent_harness_modifications/
 
 ---
 
-## Prerequisites
+## Before You Begin — First-Time Setup
 
-| Tool | Install |
-|------|---------|
-| [Ollama](https://ollama.com) | `brew install ollama` or download app |
-| Python 3 | `brew install python3` |
-| Node.js | `brew install node` (for npx-based MCP servers) |
-| Claude Code | `npm install -g @anthropic-ai/claude-code` |
-| OpenClaw | `ollama launch openclaw --config` |
-| Pi | `ollama launch pi` (first run installs it) |
-| Codex | `npm install -g @openai/codex` |
+Run these steps **once** on a new machine before cloning this repo.
+
+### 1. Install Ollama
+
+```bash
+# macOS — download the app (recommended) or use brew:
+brew install ollama
+# or: download from https://ollama.com and open /Applications/Ollama.app
+```
+
+After installing, Ollama runs as a menubar app. Make sure it's running before launching any harness.
+
+### 2. Pull a model (or use cloud models)
+
+```bash
+# Cloud model — no download needed, streams from Ollama's servers:
+ollama pull qwen3.5:397b-cloud    # or minimax-m2.7:cloud
+
+# Local model — runs on your machine (~2GB download):
+ollama pull llama3.2:3b           # fast, good for subagents
+```
+
+### 3. Install Node.js (for MCP servers)
+
+```bash
+brew install node
+# Verify: node --version  (needs v18+)
+```
+
+### 4. Install Claude Code
+
+```bash
+npm install -g @anthropic-ai/claude-code
+
+# Authenticate (requires Claude Pro/Max/Team account):
+claude auth login
+# → opens browser, log in with your Anthropic account
+
+# Verify it works:
+claude --version
+```
+
+### 5. Install OpenClaw, Pi, Codex (optional — install only what you use)
+
+```bash
+# OpenClaw — first run downloads and configures it:
+ollama launch openclaw --config
+# → follow the onboarding wizard, then quit
+
+# Pi — first run installs it:
+ollama launch pi
+# → let it initialize, then Ctrl+C once it's ready
+
+# Codex CLI:
+npm install -g @openai/codex
+```
+
+> **Note:** OpenClaw, Pi, and Codex are optional. `install.sh` will skip harnesses that aren't installed and show a warning.
+
+### 6. Install Python 3 (usually pre-installed on macOS)
+
+```bash
+# Check: python3 --version  (needs 3.8+)
+# If missing: brew install python3
+```
+
+---
+
+## Prerequisites Summary
+
+| Tool | Required? | One-line install |
+|------|-----------|-----------------|
+| [Ollama](https://ollama.com) | ✅ Required | Download app or `brew install ollama` |
+| Python 3 | ✅ Required | Pre-installed on macOS, or `brew install python3` |
+| Node.js | ✅ Required | `brew install node` |
+| Claude Code | ✅ Required | `npm install -g @anthropic-ai/claude-code` + `claude auth login` |
+| OpenClaw | Optional | `ollama launch openclaw --config` (first run installs) |
+| Pi | Optional | `ollama launch pi` (first run installs) |
+| Codex | Optional | `npm install -g @openai/codex` |
 
 ---
 
