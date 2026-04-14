@@ -10,7 +10,7 @@
 # Claude Code: inject skills via --append-system-prompt-file
 _claude_with_skills() {
     local _skills_file="/tmp/claude-skills-$$.txt"
-    cat ~/.claude/skills-cache/lean-skills.txt > "$_skills_file" 2>/dev/null
+    cat ~/.claude/skills-cache/combined-skills.txt > "$_skills_file" 2>/dev/null
     if [ -s "$_skills_file" ]; then
         (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command claude --append-system-prompt-file "$_skills_file" "$@")
     else

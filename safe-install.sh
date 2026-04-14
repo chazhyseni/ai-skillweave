@@ -232,7 +232,7 @@ create_loader() {
     cat > "$SKILLS_CACHE_DIR/load-skills.sh" << LOADER
 #!/bin/bash
 # Load combined skills - file-based approach to avoid environment limits
-# SKILLS_CONTENT available via: \$(cat ~/.claude/skills-cache/lean-skills.txt)
+# SKILLS_CONTENT available via: \$(cat ~/.claude/skills-cache/combined-skills.txt)
 COMBINED_SKILLS_FILE='$COMBINED_FILE'
 LOADER
 
@@ -258,7 +258,7 @@ generate_skills_block() {
 # Helper function to inject skills as system prompt (uses file to avoid arg length limits)
 _claude_with_skills() {
     local _skills_file="/tmp/claude-skills-$$.txt"
-    cat ~/.claude/skills-cache/lean-skills.txt > "$_skills_file" 2>/dev/null
+    cat ~/.claude/skills-cache/combined-skills.txt > "$_skills_file" 2>/dev/null
     if [ -s "$_skills_file" ]; then
         (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command claude --append-system-prompt-file "$_skills_file" "$@")
     else

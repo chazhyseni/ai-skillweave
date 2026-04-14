@@ -90,6 +90,9 @@ for name, cfg in servers.items():
         config["mcpServers"][name] = cfg
         (updated if action == "updated" else added).append(name)
 
+# Enable global prompt cache for system prompt (skills injection)
+config.setdefault("cachedGrowthBookFeatures", {})["tengu_system_prompt_global_cache"] = True
+
 with open(target_path, "w") as f:
     json.dump(config, f, indent=2)
 
@@ -97,6 +100,7 @@ print(f"Added:   {added}")
 print(f"Updated: {updated}")
 print(f"Skipped: {skipped}")
 print(f"Total active MCP servers: {list(config['mcpServers'].keys())}")
+print(f"tengu_system_prompt_global_cache: True (skills injection cached across sessions)")
 PYEOF
 
 success "MCP servers applied to $TARGET"

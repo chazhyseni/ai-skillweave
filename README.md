@@ -312,6 +312,43 @@ scripts/update-ecc.sh --force   # Force cache rebuild even if already up to date
 
 ---
 
+## Token Efficiency — Skills Injection + Prompt Caching
+
+All 775 skills (~1.16MB / ~289K tokens) are injected into every `claude` session via `--append-system-prompt-file`. This sounds expensive, but Claude Code's **prompt caching** makes it economical:
+
+### How caching works
+
+| Event | Cost at Opus pricing |
+|-------|---------------------|
+| Session 1 (cache miss) | ~$4.35 (289K × $15/MTok) |
+| Session 2+ same day (cache hit) | ~$0.43 (289K × $1.50/MTok cache read) |
+| Each conversation turn | Only new tokens in the exchange |
+
+**5 sessions/day with caching: $4.35 + 4 × $0.43 = $6.07**  
+Without caching it would be $4.35 × 5 = $21.75. With caching: **72% cheaper.**
+
+### What's already enabled
+
+`setup-mcp.sh` sets `tengu_system_prompt_global_cache: true` in `~/.claude.json`. This persists the cache **across sessions** (not just within one session), so the system prompt (skills injection) is reused from cache as long as the file content doesn't change.
+
+Running `./install.sh` on a new machine configures this automatically.
+
+### Why full injection beats selective injection
+
+Selective/on-demand loading requires the user to know which skills to activate. Full injection means Claude automatically applies relevant skills (TDD when writing tests, security review when touching auth, etc.) **without any explicit invocation** — which is the whole point.
+
+### `lean-skills.txt` — optional fallback
+
+`~/.claude/skills-cache/lean-skills.txt` contains only your 3 personal learned skills (~6K tokens) as a fallback for situations where you want minimal injection. Switch via `.zshrc`:
+```bash
+# In _claude_with_skills function, change:
+cat ~/.claude/skills-cache/combined-skills.txt   # ← full 775 skills (default)
+# to:
+cat ~/.claude/skills-cache/lean-skills.txt        # ← personal skills only
+```
+
+---
+
 ## Cloud vs Local Models
 
 All model names ending in `-cloud` or `:cloud` are Ollama cloud-hosted (no local GPU needed, but require internet):
