@@ -51,10 +51,12 @@ if [ ! -d "$ECC_DIR/.git" ]; then
     # Copy .git into ECC dir so future pulls work
     cp -r ecc-update-tmp/.git "$ECC_DIR/.git"
     cd "$ECC_DIR"
-    # Mark all existing files as matching the current HEAD (avoid false diffs)
+    # Reset index to HEAD without touching working tree files
     git reset HEAD --quiet 2>/dev/null || true
     rm -rf /tmp/ecc-update-tmp
-    success "Git tracking initialized for $ECC_DIR"
+    # Now restore working tree to match HEAD (safe-install files may be older than HEAD)
+    git checkout -- skills/ 2>/dev/null || true
+    success "Git tracking initialized + skills restored to current HEAD"
 fi
 
 log "Checking for ECC updates..."
@@ -64,6 +66,14 @@ CURRENT=$(git rev-parse HEAD)
 git fetch origin --quiet
 
 REMOTE=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master 2>/dev/null)
+
+# Always ensure working tree skills match HEAD (guards against stale installs)
+DIRTY=$(git status --short skills/ 2>/dev/null | grep -c '^.[^?]' || true)
+if [ "$DIRTY" -gt 0 ] 2>/dev/null; then
+    log "Working tree has $DIRTY stale skill files — restoring from HEAD..."
+    git checkout -- skills/ 2>/dev/null || true
+    success "Skills working tree restored to HEAD"
+fi
 
 if [ "$CURRENT" = "$REMOTE" ]; then
     success "ECC already up to date ($(git log -1 --format='%h %s' HEAD))"
