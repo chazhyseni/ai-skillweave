@@ -161,21 +161,40 @@ OpenClaw's native subagent system works via `~/.openclaw/subagents/`. After setu
 
 ---
 
-## Skills Layer
+## ECC Skills — Everything Claude Code
 
-Every harness command is wrapped to inject ECC skills:
+This repo is built on top of **[Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of 1,789+ production-ready skills covering every domain of software development: testing, architecture, security, cloud deployment, language-specific patterns, and more.
 
-```
-ollama launch claude   →  _claude_with_skills()   →  injects via --append-system-prompt-file
-ollama launch openclaw →  _openclaw_with_skills() →  loads from ~/.openclaw/workspace/skills/
-ollama launch pi       →  _pi_with_skills()       →  loads from ~/.pi/agent/skills/
-ollama launch codex    →  _codex_with_skills()    →  loads from ~/.codex/skills/
-```
+### What ECC Is
 
-To sync newly-learned skills across all harnesses:
+ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *how to think* about specific tasks. Each skill covers: when to activate, how to approach the problem, examples, and pitfalls. They're harness-agnostic by design.
+
+### What ai-skillweave Adds
+
+ECC was originally built for Claude Code. **ai-skillweave extends it across every `ollama launch` harness:**
+
+| Harness | How skills load |
+|---------|----------------|
+| `ollama launch claude` | Injected via `--append-system-prompt-file` from `~/.claude/skills-cache/combined-skills.txt` |
+| `ollama launch openclaw` | Copied as real files to `~/.openclaw/workspace/skills/` (OpenClaw native format) |
+| `ollama launch pi` | Symlinked to `~/.pi/agent/skills/` (Pi native format) |
+| `ollama launch codex` | Symlinked to `~/.codex/skills/` (Codex native format) |
+
+### Cross-Harness Skill Sync
+
+When you learn something useful in one session, sync it everywhere:
 ```bash
-learn-sync          # Full sync
-learn-sync-dry      # Preview only
+learn-sync          # Extract patterns + sync to all harnesses
+learn-sync-dry      # Preview what would sync
+```
+
+Learned skills live in `~/.claude/skills/learned/` and are automatically propagated to all harness-native skill directories.
+
+### Installing ECC
+
+```bash
+./safe-install.sh                  # ECC only
+./safe-install.sh --with-curated   # ECC + Anthropic official + community skills
 ```
 
 ---
