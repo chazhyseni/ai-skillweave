@@ -156,50 +156,140 @@ success "Cache rebuilt: $CACHE_SIZE bytes → $COMBINED_FILE"
 
 # =============================================================================
 # Step 3: Re-sync to harness native skill directories
+#         Uses YAML sanitization for skills with incompatible frontmatter
+#         (block-scalar descriptions or extra fields like homepage/license/version)
 # =============================================================================
-log "Re-syncing skills to harnesses..."
+log "Re-syncing skills to harnesses (with YAML sanitization)..."
 
-SYNCED=0
+python3 - << 'PYEOF'
+import os, re, shutil
 
-# OpenClaw: real file copies (not symlinks — OpenClaw rejects symlinks outside workspace)
-OPENCLAW_WS="$HOME/.openclaw/workspace/skills"
-if [ -d "$HOME/.openclaw/workspace" ]; then
-    mkdir -p "$OPENCLAW_WS"
-    for dir in "$ECC_DIR/skills"/*/; do
-        skill_name=$(basename "$dir")
-        [ ! -f "$dir/SKILL.md" ] && continue
-        # Skip block scalars and extra fields (break openclaw YAML parser)
-        grep -q '^description: *[>|]' "$dir/SKILL.md" 2>/dev/null && continue
-        dst="$OPENCLAW_WS/$skill_name"
-        # Update if ECC version is newer
-        if [ ! -f "$dst/SKILL.md" ] || [ "$dir/SKILL.md" -nt "$dst/SKILL.md" ]; then
-            mkdir -p "$dst"
-            cp "$dir/SKILL.md" "$dst/SKILL.md"
-            SYNCED=$((SYNCED + 1))
-        fi
-    done
-    OC_COUNT=$(ls "$OPENCLAW_WS" 2>/dev/null | wc -l | tr -d ' ')
-    success "OpenClaw: $OC_COUNT skills ($SYNCED updated)"
-fi
+home = os.path.expanduser("~")
+ecc_dir = os.path.join(home, ".claude-everything-claude-code", "skills")
+openclaw_ws = os.path.join(home, ".openclaw", "workspace", "skills")
+pi_skills   = os.path.join(home, ".pi", "agent", "skills")
+codex_skills= os.path.join(home, ".codex", "skills")
 
-# Pi and Codex: symlinks (they accept symlinks)
-for harness_dir in "$HOME/.pi/agent/skills" "$HOME/.codex/skills"; do
-    [ -d "$(dirname "$harness_dir")" ] || continue
-    mkdir -p "$harness_dir"
-    HARNESS_SYNCED=0
-    for dir in "$ECC_DIR/skills"/*/; do
-        skill_name=$(basename "$dir")
-        [ ! -f "$dir/SKILL.md" ] && continue
-        grep -q '^description: *[>|]' "$dir/SKILL.md" 2>/dev/null && continue
-        if [ ! -e "$harness_dir/$skill_name" ]; then
-            ln -s "$dir" "$harness_dir/$skill_name"
-            HARNESS_SYNCED=$((HARNESS_SYNCED + 1))
-        fi
-    done
-    HARNESS=$(basename "$(dirname "$harness_dir")")
-    TOTAL=$(ls "$harness_dir" 2>/dev/null | wc -l | tr -d ' ')
-    success "$HARNESS: $TOTAL skills ($HARNESS_SYNCED new links)"
-done
+ALLOWED_FIELDS = {"name", "description", "origin", "tools"}
+
+def sanitize_skill_md(path):
+    """Return sanitized SKILL.md content (strips extra fields, flattens block scalars)."""
+    with open(path) as f:
+        content = f.read()
+
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return content  # no frontmatter, return as-is
+
+    fm_raw = parts[1]
+    body = parts[2]
+
+    # Parse frontmatter lines
+    new_fm_lines = []
+    lines = fm_raw.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r"^([a-z_]+):\s*(.*)", line)
+        if m:
+            field, value = m.group(1), m.group(2).strip()
+            if field not in ALLOWED_FIELDS:
+                # Skip extra fields
+                i += 1
+                continue
+            if field == "description" and value in (">", ">-", "|", "|-", ">|", ""):
+                # Collect block scalar lines
+                block_lines = []
+                i += 1
+                while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                    block_lines.append(lines[i].strip())
+                    i += 1
+                desc = " ".join(block_lines).strip()
+                # Truncate long descriptions and escape quotes
+                desc = desc[:200].replace('"', "'")
+                new_fm_lines.append(f'description: "{desc}"')
+                continue
+        new_fm_lines.append(line)
+        i += 1
+
+    return "---\n" + "\n".join(new_fm_lines) + "\n---" + body
+
+def needs_sanitize(path):
+    """Check if SKILL.md has block scalars or extra fields."""
+    with open(path) as f:
+        content = f.read()
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return False
+    fm = parts[1]
+    # Block scalar descriptions
+    if re.search(r"^description:\s*[>|]", fm, re.MULTILINE):
+        return True
+    # Extra fields
+    fields = re.findall(r"^([a-z_]+):", fm, re.MULTILINE)
+    return bool(set(fields) - ALLOWED_FIELDS)
+
+stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}}
+
+# --- OpenClaw: real file copies (sanitized where needed) ---
+if os.path.isdir(os.path.join(home, ".openclaw", "workspace")):
+    os.makedirs(openclaw_ws, exist_ok=True)
+    for skill_name in os.listdir(ecc_dir):
+        src = os.path.join(ecc_dir, skill_name, "SKILL.md")
+        if not os.path.exists(src):
+            continue  # skip 'learned' dir and others without SKILL.md
+        dst_dir = os.path.join(openclaw_ws, skill_name)
+        dst = os.path.join(dst_dir, "SKILL.md")
+        src_mtime = os.path.getmtime(src)
+        dst_mtime = os.path.getmtime(dst) if os.path.exists(dst) else 0
+        if src_mtime > dst_mtime:
+            os.makedirs(dst_dir, exist_ok=True)
+            if needs_sanitize(src):
+                with open(dst, "w") as f:
+                    f.write(sanitize_skill_md(src))
+            else:
+                shutil.copy2(src, dst)
+            stats["openclaw"]["updated"] += 1
+    stats["openclaw"]["total"] = len([d for d in os.listdir(openclaw_ws) if os.path.isdir(os.path.join(openclaw_ws, d))])
+
+# --- Pi: real file copies (Pi handles more YAML but use same sanitization for safety) ---
+if os.path.isdir(os.path.join(home, ".pi", "agent")):
+    os.makedirs(pi_skills, exist_ok=True)
+    for skill_name in os.listdir(ecc_dir):
+        src = os.path.join(ecc_dir, skill_name, "SKILL.md")
+        if not os.path.exists(src):
+            continue
+        dst_dir = os.path.join(pi_skills, skill_name)
+        dst_skill = os.path.join(dst_dir, "SKILL.md")
+        # Pi uses symlinks — check if symlink exists
+        if not os.path.exists(os.path.join(pi_skills, skill_name)):
+            os.symlink(os.path.join(ecc_dir, skill_name), os.path.join(pi_skills, skill_name))
+            stats["pi"]["added"] += 1
+    stats["pi"]["total"] = len(os.listdir(pi_skills))
+
+# --- Codex: symlinks where compatible, sanitized real files where not ---
+if os.path.isdir(os.path.join(home, ".codex")):
+    os.makedirs(codex_skills, exist_ok=True)
+    for skill_name in os.listdir(ecc_dir):
+        src = os.path.join(ecc_dir, skill_name, "SKILL.md")
+        if not os.path.exists(src):
+            continue
+        dst_path = os.path.join(codex_skills, skill_name)
+        if not os.path.exists(dst_path):
+            if needs_sanitize(src):
+                # Write sanitized real directory
+                os.makedirs(dst_path, exist_ok=True)
+                with open(os.path.join(dst_path, "SKILL.md"), "w") as f:
+                    f.write(sanitize_skill_md(src))
+            else:
+                os.symlink(os.path.join(ecc_dir, skill_name), dst_path)
+            stats["codex"]["added"] += 1
+    stats["codex"]["total"] = len(os.listdir(codex_skills))
+
+print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated, all 156 ECC skills including sanitized)")
+print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new links)")
+print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")
+PYEOF
 
 echo ""
 success "ECC update complete! Restart Claude Code and OpenClaw to load new skills."

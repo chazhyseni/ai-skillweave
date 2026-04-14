@@ -8,7 +8,7 @@ One-command setup for all your Ollama agent harnesses: proper MCP servers, web t
 
 ## Built on Everything Claude Code (ECC)
 
-> **The skills powering this repo come from [Everything Claude Code](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of 1,789+ production-ready AI agent skills covering every domain of software development.
+> **The skills powering this repo come from [Everything Claude Code](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of production-ready AI agent skills covering every domain of software development.
 
 `ai-skillweave`'s core contribution is **cross-harness delivery**: ECC was originally designed for Claude Code only. This repo extends it so the same skill library loads natively into every `ollama launch` agent — OpenClaw, Pi, Codex, and Claude Code — each in the format that harness expects.
 
@@ -47,7 +47,7 @@ ollama launch codex       # Codex via Ollama backend
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
 | **Codex** | Configures `ollama-launch` provider in `~/.codex/config.toml` |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.zshrc` |
-| **ECC Skills** | Installs 1,789+ Everything Claude Code skills for all harnesses |
+| **ECC Skills** | Installs ECC + Anthropic official + Codex skills across all harnesses |
 
 ---
 
@@ -173,22 +173,35 @@ OpenClaw's native subagent system works via `~/.openclaw/subagents/`. After setu
 
 ## ECC Skills — Everything Claude Code
 
-This repo is built on top of **[Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of 1,789+ production-ready skills covering every domain of software development: testing, architecture, security, cloud deployment, language-specific patterns, and more.
+This repo is built on top of **[Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of production-ready skills covering every domain of software development: testing, architecture, security, cloud deployment, language-specific patterns, and more.
 
 ### What ECC Is
 
 ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *how to think* about specific tasks. Each skill covers: when to activate, how to approach the problem, examples, and pitfalls. They're harness-agnostic by design.
 
+### Skill Counts (verified)
+
+| Source | Skills | Notes |
+|--------|--------|-------|
+| ECC core | 156 SKILL.md | 157 dirs, 1 is `learned` storage |
+| Anthropic official | 72 | Installed via `safe-install.sh --with-curated` |
+| OpenAI Codex | 535 available, 100 loaded | Capped to manage context window size |
+| Community curated | 1 | |
+| Personal learned | varies | Your own patterns extracted from sessions |
+| **Claude Code cache total** | **~391 files → 1.2MB** | Combined into `combined-skills.txt` |
+
 ### What ai-skillweave Adds
 
 ECC was originally built for Claude Code. **ai-skillweave extends it across every `ollama launch` harness:**
 
-| Harness | How skills load |
-|---------|----------------|
-| `ollama launch claude` | Injected via `--append-system-prompt-file` from `~/.claude/skills-cache/combined-skills.txt` |
-| `ollama launch openclaw` | Copied as real files to `~/.openclaw/workspace/skills/` (OpenClaw native format) |
-| `ollama launch pi` | Symlinked to `~/.pi/agent/skills/` (Pi native format) |
-| `ollama launch codex` | Symlinked to `~/.codex/skills/` (Codex native format) |
+| Harness | Skills | How they load |
+|---------|--------|--------------|
+| `ollama launch claude` | 391 (all sources) | Injected via `--append-system-prompt-file` at startup |
+| `ollama launch openclaw` | 159 (156 ECC + 3 learned) | Real `.md` file copies, YAML-sanitized for compatibility |
+| `ollama launch pi` | 159 (156 ECC + 3 learned) | Symlinks to ECC skill dirs |
+| `ollama launch codex` | 202 (156 ECC + 46 native) | Symlinks + YAML-sanitized copies; 46 are native Codex skills |
+
+> **YAML sanitization:** 12 ECC skills with block-scalar descriptions or extra metadata fields (`homepage`, `license`, `version`) are automatically sanitized on-the-fly for OpenClaw and Codex compatibility without modifying the source.
 
 ### Cross-Harness Skill Sync
 
