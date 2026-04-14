@@ -175,6 +175,14 @@ fi
 CACHE_SIZE=$(wc -c < "$COMBINED_FILE" | tr -d ' ')
 success "Cache rebuilt: $CACHE_SIZE bytes → $COMBINED_FILE"
 
+# Rebuild lean cache (personal learned skills only)
+# This is what _claude_with_skills injects into Anthropic Opus sessions.
+# ~6K tokens vs 289K tokens — 98% reduction for frontier model sessions.
+LEAN_FILE="$SKILLS_CACHE_DIR/lean-skills.txt"
+cat "$HOME/.claude/skills/learned"/*.md > "$LEAN_FILE" 2>/dev/null
+LEAN_SIZE=$(wc -c < "$LEAN_FILE" | tr -d ' ')
+success "Lean cache: $LEAN_SIZE bytes (personal learned skills only — injected into 'claude' sessions)"
+
 # =============================================================================
 # Step 3: Re-sync to harness native skill directories
 #         Uses YAML sanitization for skills with incompatible frontmatter
