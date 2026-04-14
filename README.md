@@ -45,9 +45,10 @@ ollama launch codex       # Codex via Ollama backend
 | **Claude Code MCP** | Adds 6 servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer |
 | **OpenClaw** | Enables web tools + Ollama plugin in `~/.openclaw/openclaw.json` |
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
-| **Codex** | Configures `ollama-launch` provider in `~/.codex/config.toml` |
+| **Codex** | Configures `ollama-launch` provider + `danger-full-access` sandbox in `~/.codex/config.toml` |
+| **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (minimax for claude/cline/codex, qwen for openclaw/pi) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.zshrc` |
-| **ECC Skills** | Installs ECC + Anthropic official + Codex skills across all harnesses |
+| **ECC Skills** | Installs ECC + Anthropic official + 469 Codex skills (~775 files → 1.16MB cache) |
 
 ---
 
@@ -194,10 +195,10 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 |--------|--------|-------|
 | ECC core | 183 SKILL.md dirs | 185 total dirs, 2 are local-only (learned + project-guidelines-example) |
 | Anthropic official | 64 | In `anthropic-official/skills/` subdir (excludes README/docs) |
-| OpenAI Codex | 470 available, 100 loaded | In `openai-codex/skills/`; capped to preserve context window |
+| OpenAI Codex | **469** (all loaded) | In `openai-codex/skills/`; previously capped at 100, now uncapped |
 | Community curated | 0 (catalog only) | Web-based skill index, no downloadable files |
 | Personal learned | varies | Your own patterns extracted from sessions |
-| **Claude Code cache total** | **~407 files → 1.1MB** | Combined into `combined-skills.txt` |
+| **Claude Code cache total** | **~775 files → 1.16MB** | Combined into `combined-skills.txt` |
 
 ### What ai-skillweave Adds
 
@@ -205,7 +206,7 @@ ECC was originally built for Claude Code. **ai-skillweave extends it across ever
 
 | Harness | Skills | How they load |
 |---------|--------|--------------|
-| `ollama launch claude` | ~407 (all sources) | Injected via `--append-system-prompt-file` at startup |
+| `ollama launch claude` | ~775 (all sources) | Injected via `--append-system-prompt-file` at startup |
 | `ollama launch openclaw` | 187 (183 ECC + 3 learned + extras) | Real `.md` file copies, YAML-sanitized for compatibility |
 | `ollama launch pi` | 187 (183 ECC + 3 learned + extras) | Symlinks to ECC skill dirs |
 | `ollama launch codex` | 230 (183 ECC + 46 native) | Symlinks + YAML-sanitized copies; 46 are native Codex skills |
