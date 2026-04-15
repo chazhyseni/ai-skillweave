@@ -231,6 +231,16 @@ def sanitize_frontmatter(content, skill_id):
 
     return '---\n' + '\n'.join(new_lines) + '\n---' + body
 
+PREAMBLE = """
+> **CRITICAL — follow these rules in every response:**
+> - Be terse. No trailing summaries or status recaps.
+> - Use codesight_get_summary BEFORE exploring a codebase with Grep/Glob/Read.
+> - Use smart_read (token-optimizer) instead of Read for large files.
+> - Use context7 query-docs BEFORE answering library/framework questions.
+> - Use exa-web-search for anything that may have changed since training cutoff.
+
+"""
+
 packaged = 0
 errors = []
 
@@ -243,6 +253,11 @@ for entry in skill_entries:
         content = f.read()
 
     sanitized = sanitize_frontmatter(content, skill_id)
+
+    # Inject preamble after frontmatter
+    if sanitized.count('---') >= 2:
+        parts = sanitized.split('---', 2)
+        sanitized = '---' + parts[1] + '---\n' + PREAMBLE + parts[2]
 
     # Create .skill zip
     skill_file = os.path.join(output_dir, f'{skill_id}.skill')
