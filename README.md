@@ -434,7 +434,7 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 ./scripts/setup-claude-desktop.sh --skills-only
 
 # Choose skill tier (default: full)
-./scripts/setup-claude-desktop.sh --tier essential   # 3 personal skills (~5K tokens)
+./scripts/setup-claude-desktop.sh --tier essential   # Personal learned skills only
 ./scripts/setup-claude-desktop.sh --tier standard    # 53 skills (~54K tokens)
 ./scripts/setup-claude-desktop.sh --tier full        # 91 skills (~89K tokens)
 ```
@@ -459,7 +459,7 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 | Tier | Skills | Size | Tokens | What's included |
 |------|--------|------|--------|-----------------|
-| `essential` | 3 | 23KB | ~5K | Personal learned skills only |
+| `essential` | varies | varies | varies | Personal learned skills only (from `~/.claude/skills/learned/`) |
 | `standard` | 53 | 219KB | ~54K | + 27 universal agents + 23 top commands |
 | `full` | 91 | 358KB | ~89K | + ALL 60 universal commands |
 
