@@ -386,6 +386,45 @@ ollama pull llama3.2:3b
 
 ---
 
+## Codebase Context — Codesight Integration
+
+> **Powered by [codesight](https://github.com/Houseofmvps/codesight)** — *See your codebase clearly.* Universal AI context generator that maps routes, schema, components, dependencies, and more for Claude Code, Cursor, Copilot, Codex, and any AI coding tool.
+
+### What codesight does
+
+When Claude Code is working inside any repo, `codesight --mcp` provides a real-time context map so Claude understands *where things live* without manually exploring files. It generates:
+
+- Route maps, schema, components, library dependencies
+- `CLAUDE.md` — auto-generated project context for Claude Code
+- `.cursorrules` — Cursor IDE rules
+- `codex.md` / `AGENTS.md` — config for Codex and agentic tools
+- `.codesight/CODESIGHT.md` — full AI context map (~200 tokens vs ~1,100 tokens of manual exploration)
+
+### How it's integrated
+
+`codesight` runs as an MCP server — one of the 7 servers applied automatically by `./install.sh`:
+
+```bash
+# Claude Code queries this server for codebase context automatically
+npx -y codesight --mcp
+```
+
+### Using codesight in your own repos
+
+```bash
+# In any project root:
+npx codesight --init           # Generate CLAUDE.md + .cursorrules + codex.md + AGENTS.md
+npx codesight                  # Scan and update .codesight/CODESIGHT.md
+npx codesight --wiki           # Generate wiki knowledge base
+npx codesight --open           # Generate interactive HTML report + open in browser
+npx codesight --max-tokens 50000  # Trim to fit token budget
+```
+
+The `.codesight/` directory is gitignored (auto-regenerated), but `CLAUDE.md`, `.cursorrules`, `codex.md`, and `AGENTS.md` are committed to the repo so teammates get instant AI context.
+
+
+---
+
 ## See Also
 
 - `docs/AUDIT.md` — Full audit of MCP and subagent issues found and fixed
