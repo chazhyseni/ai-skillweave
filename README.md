@@ -465,11 +465,24 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 ### How to add skills to Claude Desktop
 
-1. Run `./scripts/setup-claude-desktop.sh` (configures MCP + generates skills file)
-2. Restart Claude Desktop app
-3. In Claude Desktop, create a new **Project**
-4. Paste the contents of `configs/claude-desktop-project-instructions.md` as the Project's **custom instructions**
-5. All conversations in that Project will have the skills active
+> **Why is this manual?** Claude Desktop Projects are server-side (synced to claude.ai) — there is no local config file for project instructions. The Desktop config (`claude_desktop_config.json`) only supports `mcpServers`, `preferences`, and `bypassPermissions`. Skills must be pasted into a Project through the UI.
+
+1. Run `./scripts/setup-claude-desktop.sh` — configures MCP servers + generates the skills file
+2. Copy skills to clipboard:
+
+   ```bash
+   cat configs/claude-desktop-project-instructions.md | pbcopy   # macOS
+   # Linux: cat configs/claude-desktop-project-instructions.md | xclip -selection clipboard
+   # Windows: cat configs/claude-desktop-project-instructions.md | clip
+   ```
+
+3. Restart Claude Desktop app (so MCP servers load)
+4. In Claude Desktop, create a new **Project** (or open an existing one)
+5. Open Project **Settings** → **Custom Instructions**
+6. **Cmd+V** (or Ctrl+V) to paste the skills
+7. All conversations in that Project will have the skills active automatically
+
+To update skills later (e.g. after `update-ecc.sh`), re-run the setup script and repeat steps 2-6.
 
 ### Token economics (Desktop)
 
