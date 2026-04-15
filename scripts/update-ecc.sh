@@ -223,7 +223,12 @@ codex_skills= os.path.join(home, ".codex", "skills")
 ALLOWED_FIELDS = {"name", "description", "origin", "tools"}
 
 def sanitize_skill_md(path):
-    """Return sanitized SKILL.md content (strips extra fields, flattens block scalars)."""
+    """Return sanitized SKILL.md content (strips extra fields, flattens block scalars).
+
+    Also strips indented continuation lines after any field (these are
+    nested YAML mappings like 'author:' or 'clawdbot:' indented under
+    'origin:' in some ECC skills — invalid YAML that Codex rejects).
+    """
     with open(path) as f:
         content = f.read()
 
@@ -240,18 +245,25 @@ def sanitize_skill_md(path):
     i = 0
     while i < len(lines):
         line = lines[i]
+        # Skip indented lines — these are nested YAML under the previous field
+        # (e.g. "  author: evos" under "origin: ECC") which is invalid YAML
+        if line and (line[0] == ' ' or line[0] == '\t'):
+            i += 1
+            continue
         m = re.match(r"^([a-z_]+):\s*(.*)", line)
         if m:
             field, value = m.group(1), m.group(2).strip()
             if field not in ALLOWED_FIELDS:
-                # Skip extra fields
+                # Skip extra fields and their indented continuations
                 i += 1
+                while i < len(lines) and lines[i] and (lines[i][0] == ' ' or lines[i][0] == '\t'):
+                    i += 1
                 continue
             if field == "description" and value in (">", ">-", "|", "|-", ">|", ""):
                 # Collect block scalar lines
                 block_lines = []
                 i += 1
-                while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                while i < len(lines) and lines[i] and (lines[i][0] == ' ' or lines[i][0] == '\t'):
                     block_lines.append(lines[i].strip())
                     i += 1
                 desc = " ".join(block_lines).strip()
@@ -259,13 +271,19 @@ def sanitize_skill_md(path):
                 desc = desc[:200].replace('"', "'")
                 new_fm_lines.append(f'description: "{desc}"')
                 continue
+            if field == "description" and "\n" in value:
+                # Multi-line inline description with continuation on next line
+                desc = value.split("\n")[0].strip()[:200].replace('"', "'")
+                new_fm_lines.append(f'description: "{desc}"')
+                i += 1
+                continue
         new_fm_lines.append(line)
         i += 1
 
     return "---\n" + "\n".join(new_fm_lines) + "\n---" + body
 
 def needs_sanitize(path):
-    """Check if SKILL.md has block scalars or extra fields."""
+    """Check if SKILL.md has block scalars, extra fields, or indented nested mappings."""
     with open(path) as f:
         content = f.read()
     parts = content.split("---", 2)
@@ -275,9 +293,17 @@ def needs_sanitize(path):
     # Block scalar descriptions
     if re.search(r"^description:\s*[>|]", fm, re.MULTILINE):
         return True
-    # Extra fields
+    # Extra top-level fields
     fields = re.findall(r"^([a-z_]+):", fm, re.MULTILINE)
-    return bool(set(fields) - ALLOWED_FIELDS)
+    if set(fields) - ALLOWED_FIELDS:
+        return True
+    # Indented lines that look like nested YAML mappings (e.g. "  author: evos")
+    if re.search(r"^[ \t]+[a-z_]+:", fm, re.MULTILINE):
+        return True
+    # Description with continuation on next line (e.g. "description: foo\n  tags: bar")
+    if re.search(r"^description:.*\n\s+\S+:", fm, re.MULTILINE):
+        return True
+    return False
 
 curated_dir = os.path.join(home, ".claude-curated-skills")
 anthropic_skills_dir = os.path.join(curated_dir, "anthropic-official", "skills")
