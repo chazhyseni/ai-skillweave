@@ -62,7 +62,9 @@ agent_harness_modifications/
 ├── extract-conversation-skills.py ← Extract patterns from conversation history
 │
 ├── configs/                      ← Portable config templates
-│   ├── claude-mcp-servers.json   ← MCP servers for Claude Code
+│   ├── claude-mcp-servers.json   ← MCP servers for Claude Code CLI
+│   ├── claude-desktop-mcp-servers.json  ← MCP servers for Claude Desktop GUI
+│   ├── claude-desktop-project-instructions.md ← Curated skills for Desktop Project (generated)
 │   ├── openclaw.json             ← OpenClaw config (web tools enabled)
 │   ├── codex-config.toml         ← Codex ollama-launch provider config
 │   ├── pi-settings.json          ← Pi agent settings
@@ -70,7 +72,9 @@ agent_harness_modifications/
 │   └── zshrc-skills-block.sh     ← Shell skills layer block
 │
 ├── scripts/                      ← Individual setup scripts
-│   ├── setup-mcp.sh              ← Inject MCP into ~/.claude.json
+│   ├── setup-mcp.sh              ← Inject MCP into ~/.claude.json (CLI)
+│   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
+│   ├── build-desktop-skills.sh   ← Generate curated skills file (essential/standard/full)
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
 │   ├── setup-codex.sh            ← Apply Codex config
 │   ├── setup-pi.sh               ← Apply Pi settings
@@ -400,6 +404,93 @@ npx codesight --max-tokens 50000  # Trim to fit token budget
 
 When you run `npx codesight --init` in your own project, it generates `CLAUDE.md`, `.cursorrules`, `codex.md`, and `AGENTS.md` — commit those to your repo so Claude Code always has project context. The `.codesight/` scan directory is gitignored since it rebuilds every time you run a scan.
 
+
+---
+
+## Claude Desktop App (GUI) — Separate Setup
+
+> **This is independent from `install.sh`** — the CLI and Desktop app have separate config files and separate setup scripts.
+
+The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. This repo includes a standalone setup script that adds MCP servers and builds curated skills for the Desktop app.
+
+### Platform support
+
+| Platform | Config path | Status |
+|----------|------------|--------|
+| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` | Tested |
+| **Linux** | `~/.config/Claude/claude_desktop_config.json` | Supported (untested) |
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | Supported via Git Bash/WSL (untested) |
+
+### Quick setup
+
+```bash
+# Full setup: MCP servers + curated skills file
+./scripts/setup-claude-desktop.sh
+
+# MCP servers only (zero token cost — servers idle until invoked)
+./scripts/setup-claude-desktop.sh --mcp-only
+
+# Build skills file only (for pasting into a Desktop Project)
+./scripts/setup-claude-desktop.sh --skills-only
+
+# Choose skill tier (default: full)
+./scripts/setup-claude-desktop.sh --tier essential   # 3 personal skills (~5K tokens)
+./scripts/setup-claude-desktop.sh --tier standard    # 53 skills (~54K tokens)
+./scripts/setup-claude-desktop.sh --tier full        # 91 skills (~89K tokens)
+```
+
+### What gets configured
+
+**MCP servers** (9 total, same as CLI — zero token cost until invoked):
+
+| Server | Purpose |
+|--------|---------|
+| `codesight` | Codebase summaries, routes, schema, hot files |
+| `context7` | Live library/framework docs |
+| `memory` | Persistent memory across sessions |
+| `sequential-thinking` | Chain-of-thought reasoning |
+| `token-optimizer` | 95%+ context reduction via deduplication |
+| `playwright` | Browser automation |
+| `google-docs-editor` | Read/write Google Docs |
+| `github` | GitHub API (PAT copied from CLI config) |
+| `exa-web-search` | Neural web search (key copied from CLI config) |
+
+**Curated skills** — built into `configs/claude-desktop-project-instructions.md`:
+
+| Tier | Skills | Size | Tokens | What's included |
+|------|--------|------|--------|-----------------|
+| `essential` | 3 | 23KB | ~5K | Personal learned skills only |
+| `standard` | 53 | 219KB | ~54K | + 27 universal agents + 23 top commands |
+| `full` | 91 | 358KB | ~89K | + ALL 60 universal commands |
+
+### How to add skills to Claude Desktop
+
+1. Run `./scripts/setup-claude-desktop.sh` (configures MCP + generates skills file)
+2. Restart Claude Desktop app
+3. In Claude Desktop, create a new **Project**
+4. Paste the contents of `configs/claude-desktop-project-instructions.md` as the Project's **custom instructions**
+5. All conversations in that Project will have the skills active
+
+### Token economics (Desktop)
+
+| Component | Token cost |
+|-----------|-----------|
+| MCP servers (9) | Zero until invoked |
+| Skills (full tier) | ~89K tokens on first message, cached after that |
+| Skills (standard tier) | ~54K tokens on first message, cached after that |
+
+Skills are injected as Project instructions (system prompt) and cached by Claude after the first turn — similar to prompt caching in Claude Code CLI.
+
+### CLI vs Desktop comparison
+
+| Feature | Claude Code CLI | Claude Desktop GUI |
+|---------|----------------|-------------------|
+| Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
+| Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| MCP servers | 9 (auto-applied) | 9 (auto-applied, same set) |
+| Skills injection | 775 files via `--append-system-prompt-file` | 91 curated via Project instructions |
+| Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
+| Shell wrappers | `_claude_with_skills` in `.zshrc` | N/A (GUI app) |
 
 ---
 

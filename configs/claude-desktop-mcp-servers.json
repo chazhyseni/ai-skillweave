@@ -1,0 +1,55 @@
+{
+  "_comment": "MCP servers for Claude Desktop app (~/Library/Application Support/Claude/claude_desktop_config.json).",
+  "_install": "Run: scripts/setup-claude-desktop.sh — merges these into the Desktop config automatically.",
+  "_note": "API-key servers (github, exa) are copied from ~/.claude.json if they exist — not hardcoded here.",
+
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp", "--browser", "chrome"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "google-docs-editor": {
+      "command": "node",
+      "args": ["{{HOME}}/mcp-servers/google-docs-editor/build/index.js"],
+      "env": {}
+    },
+    "token-optimizer": {
+      "command": "npx",
+      "args": ["-y", "token-optimizer-mcp"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "codesight": {
+      "command": "npx",
+      "args": ["-y", "codesight", "--mcp"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    }
+  }
+}
