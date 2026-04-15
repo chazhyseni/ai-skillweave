@@ -43,6 +43,13 @@
       "env": {
         "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
       }
+    },
+    "codesight": {
+      "command": "npx",
+      "args": ["-y", "codesight", "--mcp"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
     }
   },
 

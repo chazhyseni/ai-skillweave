@@ -42,7 +42,7 @@ ollama launch codex       # Codex via Ollama backend
 
 | Component | What it configures |
 |-----------|-------------------|
-| **Claude Code MCP** | Adds 6 servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer |
+| **Claude Code MCP** | Adds 7 servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer, codesight |
 | **OpenClaw** | Enables web tools + Ollama plugin in `~/.openclaw/openclaw.json` |
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
 | **Codex** | Configures `ollama-launch` provider + `danger-full-access` sandbox in `~/.codex/config.toml` |
@@ -216,6 +216,7 @@ npm install -g @openai/codex
 | `playwright` | Browser automation from within Claude Code |
 | `google-docs-editor` | Read/write Google Docs (local server, pre-built) |
 | `token-optimizer` | 95%+ context reduction via deduplication — saves Opus tokens |
+| `codesight` | Maps codebase routes, schema, components, dependencies — AI context for any project |
 
 **No tokens or API keys needed for any of the above.** `install.sh` applies them automatically on a new machine.
 

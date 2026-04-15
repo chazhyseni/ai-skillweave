@@ -10,6 +10,9 @@
 # Sync logs (regenerated automatically)
 shared-learnings/sync.log
 
+# Codesight generated context (re-generated on each scan)
+.codesight/
+
 # macOS
 .DS_Store
 .AppleDouble
