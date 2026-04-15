@@ -334,15 +334,6 @@ Running `./install.sh` on a new machine configures this automatically.
 
 Selective/on-demand loading requires the user to know which skills to activate. Full injection means Claude automatically applies relevant skills (TDD when writing tests, security review when touching auth, etc.) **without any explicit invocation** — which is the whole point.
 
-### `lean-skills.txt` — optional fallback
-
-`~/.claude/skills-cache/lean-skills.txt` contains only your 3 personal learned skills (~6K tokens) as a fallback for situations where you want minimal injection. Switch via `.zshrc`:
-```bash
-# In _claude_with_skills function, change:
-cat ~/.claude/skills-cache/combined-skills.txt   # ← full 775 skills (default)
-# to:
-cat ~/.claude/skills-cache/lean-skills.txt        # ← personal skills only
-```
 
 ---
 
@@ -414,7 +405,6 @@ When you run `npx codesight --init` in your own project, it generates `CLAUDE.md
 
 ## See Also
 
-- `docs/AUDIT.md` — Full audit of MCP and subagent issues found and fixed
 - `docs/TROUBLESHOOTING.md` — Common problems and solutions
 - `~/.claude-everything-claude-code/` — Full ECC skills repository
 - `~/.claude-everything-claude-code/mcp-configs/mcp-servers.json` — Complete MCP server reference
