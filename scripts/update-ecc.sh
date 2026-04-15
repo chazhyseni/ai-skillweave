@@ -106,6 +106,22 @@ log "Rebuilding skills cache..."
 mkdir -p "$SKILLS_CACHE_DIR"
 > "$COMBINED_FILE"
 
+# Preamble: conciseness + MCP usage rules (must match safe-install.sh)
+cat >> "$COMBINED_FILE" << 'PREAMBLE'
+# CRITICAL INSTRUCTIONS — READ FIRST
+
+## Conciseness
+- Be terse. No trailing summaries, status tables, or "here's what I did" recaps.
+- Show the change, not paragraphs explaining the change.
+
+## Use MCP tools PROACTIVELY
+- Use codesight_get_summary BEFORE exploring a codebase with Grep/Glob/Read.
+- Use smart_read (token-optimizer) instead of Read for large files.
+- Use context7 query-docs BEFORE answering library/framework questions from training data.
+- Use exa-web-search for anything that may have changed since training cutoff.
+
+PREAMBLE
+
 _add_skill_file() {
     echo "" >> "$COMBINED_FILE"
     sed '1,/^---$/d' "$1" | sed '1,/^---$/d' >> "$COMBINED_FILE"
