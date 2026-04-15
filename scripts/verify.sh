@@ -12,6 +12,21 @@
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Platform detection
+case "$(uname -s)" in
+    Darwin*)                 OS_TYPE="macOS" ;;
+    Linux*)                  OS_TYPE="Linux" ;;
+    MINGW*|MSYS*|CYGWIN*)   OS_TYPE="Windows" ;;
+    *)                       OS_TYPE="Unknown" ;;
+esac
+
+# Detect user's default shell
+case "${SHELL##*/}" in
+    zsh)  USER_SHELL="zsh";  PRIMARY_RC="$HOME/.zshrc" ;;
+    bash) USER_SHELL="bash"; PRIMARY_RC="$HOME/.bashrc" ;;
+    *)    USER_SHELL="bash"; PRIMARY_RC="$HOME/.bashrc" ;;
+esac
+
 BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 fail() { echo -e "  ${RED}✗${NC} $1"; FAIL_COUNT=$((FAIL_COUNT+1)); }
@@ -170,10 +185,17 @@ fi
 
 # ── Skills Layer ──
 section "Shell Skills Layer"
-if grep -q "_claude_with_skills\|# Skills Layer" "$HOME/.zshrc" 2>/dev/null; then
-    ok "Skills layer in ~/.zshrc"
-else
-    fail "Skills layer not installed in ~/.zshrc"
+
+# Check all possible RC files, but primary is based on user's shell
+skills_found=false
+for rc_file in "$PRIMARY_RC" "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+    if [ -f "$rc_file" ] && grep -q "_claude_with_skills\|# Skills Layer" "$rc_file" 2>/dev/null; then
+        ok "Skills layer in $rc_file"
+        skills_found=true
+    fi
+done
+if ! $skills_found; then
+    fail "Skills layer not installed in any shell rc file"
     if $FIX; then
         echo "    → Running safe-install.sh..."
         "$REPO_DIR/safe-install.sh" && ok "Fixed: Skills layer installed"
@@ -182,31 +204,46 @@ else
     fi
 fi
 
+# Check aliases in the primary rc file
 for alias_name in claude openclaw codex ollama pi; do
-    if grep -q "alias $alias_name=" "$HOME/.zshrc" 2>/dev/null; then
-        ok "alias '$alias_name' configured"
+    if grep -q "alias $alias_name=" "$PRIMARY_RC" 2>/dev/null; then
+        ok "alias '$alias_name' configured in $(basename "$PRIMARY_RC")"
+    elif grep -q "alias $alias_name=" "$HOME/.zshrc" "$HOME/.bashrc" 2>/dev/null; then
+        ok "alias '$alias_name' configured (in alternate rc)"
     else
-        warn "alias '$alias_name' not found in ~/.zshrc"
+        warn "alias '$alias_name' not found in shell rc files"
     fi
 done
 
 # ── Network / Proxy ──
 section "Network & Proxy"
-PROXY_HTTP=$(scutil --proxy 2>/dev/null | grep "HTTPEnable" | awk '{print $3}')
-PROXY_HTTPS=$(scutil --proxy 2>/dev/null | grep "HTTPSEnable" | awk '{print $3}')
 
-if [ "$PROXY_HTTP" = "1" ] || [ "$PROXY_HTTPS" = "1" ]; then
-    warn "System HTTP/HTTPS proxy is ENABLED — may intercept Ollama streams"
-    echo "    → Fix: scripts/disable-zscaler.sh"
-else
-    ok "No system HTTP/HTTPS proxy (Zscaler off)"
-fi
+if [ "$OS_TYPE" = "macOS" ]; then
+    PROXY_HTTP=$(scutil --proxy 2>/dev/null | grep "HTTPEnable" | awk '{print $3}')
+    PROXY_HTTPS=$(scutil --proxy 2>/dev/null | grep "HTTPSEnable" | awk '{print $3}')
 
-if launchctl list | grep -q "zscaler"; then
-    warn "Zscaler tray still running"
-    echo "    → Fix: scripts/disable-zscaler.sh --tray"
+    if [ "$PROXY_HTTP" = "1" ] || [ "$PROXY_HTTPS" = "1" ]; then
+        warn "System HTTP/HTTPS proxy is ENABLED — may intercept Ollama streams"
+        echo "    → Fix: scripts/disable-zscaler.sh"
+    else
+        ok "No system HTTP/HTTPS proxy (Zscaler off)"
+    fi
+
+    if launchctl list 2>/dev/null | grep -q "zscaler"; then
+        warn "Zscaler tray still running"
+        echo "    → Fix: scripts/disable-zscaler.sh --tray"
+    else
+        ok "Zscaler tray: not running"
+    fi
 else
-    ok "Zscaler tray: not running"
+    # Linux/Windows: check environment proxy variables
+    if [ -n "$http_proxy" ] || [ -n "$https_proxy" ] || [ -n "$HTTP_PROXY" ] || [ -n "$HTTPS_PROXY" ]; then
+        warn "HTTP proxy env vars set — may intercept Ollama streams"
+        [ -n "$http_proxy" ] && echo "    http_proxy=$http_proxy"
+        [ -n "$https_proxy" ] && echo "    https_proxy=$https_proxy"
+    else
+        ok "No proxy env vars set"
+    fi
 fi
 
 if curl -s --max-time 5 -o /dev/null -w "%{http_code}" https://ollama.com 2>/dev/null | grep -q "200\|301\|302"; then

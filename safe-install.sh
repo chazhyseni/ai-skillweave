@@ -2,9 +2,10 @@
 # SAFE Install - Everything Claude Code Skills
 # =============================================================================
 # Zero-RISK installation with automatic shell integration
-# Installs ALL skills: ECC (1,789+) + Anthropic Official + Curated + your conversation-derived skills
+# Installs ALL skills: ECC + Anthropic Official + Curated + your conversation-derived skills
 # Works with: claude, openclaw, codex, ollama (direct or via ollama launch)
 # Supports: .zshrc, .bashrc, .profile
+# Platforms: macOS, Linux, Windows (WSL/MSYS2/Cygwin)
 # =============================================================================
 set -e
 
@@ -12,6 +13,26 @@ CLAUDE_DIR="$HOME/.claude"
 ECC_DIR="$HOME/.claude-everything-claude-code"
 CURATED_DIR="$HOME/.claude-curated-skills"
 SKILLS_CACHE_DIR="$HOME/.claude/skills-cache"
+
+# Platform detection
+case "$(uname -s)" in
+    Darwin*)                 OS_TYPE="macOS" ;;
+    Linux*)                  OS_TYPE="Linux" ;;
+    MINGW*|MSYS*|CYGWIN*)   OS_TYPE="Windows" ;;
+    *)                       OS_TYPE="Unknown" ;;
+esac
+
+# Detect user's default shell (not the shell running this script)
+_detect_user_shell() {
+    local shell_name="${SHELL##*/}"
+    case "$shell_name" in
+        zsh)  echo "zsh" ;;
+        bash) echo "bash" ;;
+        fish) echo "fish" ;;
+        *)    echo "bash" ;;  # safe default
+    esac
+}
+USER_SHELL="$(_detect_user_shell)"
 
 # Colors
 BLUE='\033[0;34m'
@@ -70,13 +91,19 @@ install_ecc_skills() {
 
     if [ -d "$ECC_DIR" ]; then
         warn "Existing ECC installation found: $ECC_DIR"
-        read -p "Overwrite? [y/N] " -n 1 -r
-        echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            success "Keeping existing ECC installation"
-            return 0
+        # If stdin is a terminal, prompt interactively; otherwise keep existing
+        if [ -t 0 ]; then
+            read -p "Overwrite? [y/N] " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                success "Keeping existing ECC installation"
+                return 0
+            else
+                rm -rf "$ECC_DIR"
+            fi
         else
-            rm -rf "$ECC_DIR"
+            success "Non-interactive mode — keeping existing ECC installation"
+            return 0
         fi
     fi
 
@@ -255,8 +282,13 @@ LOADER
     chmod +x "$SKILLS_CACHE_DIR/load-skills.sh"
     success "Loader created: $SKILLS_CACHE_DIR/load-skills.sh"
     # Lean cache: personal learned skills only (injected into Anthropic Opus sessions)
-    cat "$CLAUDE_DIR/skills/learned"/*.md > "$SKILLS_CACHE_DIR/lean-skills.txt" 2>/dev/null
-    success "Lean cache created: $SKILLS_CACHE_DIR/lean-skills.txt (personal skills only — 98% fewer tokens)"
+    if ls "$CLAUDE_DIR/skills/learned"/*.md >/dev/null 2>&1; then
+        cat "$CLAUDE_DIR/skills/learned"/*.md > "$SKILLS_CACHE_DIR/lean-skills.txt"
+        success "Lean cache created: $SKILLS_CACHE_DIR/lean-skills.txt (personal skills only — 98% fewer tokens)"
+    else
+        > "$SKILLS_CACHE_DIR/lean-skills.txt"
+        warn "No learned skills found — lean cache is empty"
+    fi
 }
 
 # =============================================================================
@@ -318,11 +350,13 @@ SKILLS_BLOCK
 
 setup_shell_integration() {
     log "Step 4: Setting up shell integration..."
+    log "Detected user shell: $USER_SHELL (platform: $OS_TYPE)"
 
     # Find shell rc files to update
     local shell_rcs=()
 
-    # Detect which shell rc files exist and should be updated
+    # Detect which shell rc files exist and should be updated.
+    # Add ALL existing rc files so the user can switch shells without losing integration.
     if [ -f "$HOME/.zshrc" ]; then
         shell_rcs+=("$HOME/.zshrc")
         success "Found .zshrc"
@@ -331,15 +365,26 @@ setup_shell_integration() {
         shell_rcs+=("$HOME/.bashrc")
         success "Found .bashrc"
     fi
+    if [ -f "$HOME/.bash_profile" ] && [ ${#shell_rcs[@]} -eq 0 ]; then
+        # .bash_profile is used on macOS instead of .bashrc for login shells
+        shell_rcs+=("$HOME/.bash_profile")
+        success "Found .bash_profile"
+    fi
     if [ -f "$HOME/.profile" ] && [ ${#shell_rcs[@]} -eq 0 ]; then
         shell_rcs+=("$HOME/.profile")
         success "Found .profile"
     fi
 
-    # If no rc files found, default to .zshrc (will be created)
+    # If no rc files found, create the appropriate one for the user's actual shell
     if [ ${#shell_rcs[@]} -eq 0 ]; then
-        shell_rcs+=("$HOME/.zshrc")
-        warn "No shell rc found, will create .zshrc"
+        local default_rc
+        case "$USER_SHELL" in
+            zsh)  default_rc="$HOME/.zshrc" ;;
+            bash) default_rc="$HOME/.bashrc" ;;
+            *)    default_rc="$HOME/.bashrc" ;;
+        esac
+        shell_rcs+=("$default_rc")
+        warn "No shell rc found, will create $(basename "$default_rc")"
     fi
 
     local skills_block
@@ -348,10 +393,10 @@ setup_shell_integration() {
     for shell_rc in "${shell_rcs[@]}"; do
         log "Processing $shell_rc..."
 
-        # Check for existing entries
+        # Check for existing entries and remove old block first (idempotent)
         if grep -q "# Skills Layer" "$shell_rc" 2>/dev/null; then
-            warn "Shell integration already exists in $shell_rc"
-            # Remove old entries first
+            warn "Shell integration already exists in $shell_rc — replacing"
+            # sed -i with backup suffix works on both GNU (Linux) and BSD (macOS) sed
             sed -i.bak '/# Skills Layer/,/# End Skills Layer/d' "$shell_rc" 2>/dev/null || true
             success "Removed old integration from $shell_rc"
         fi
@@ -361,7 +406,15 @@ setup_shell_integration() {
         success "Shell integration added to $shell_rc"
     done
 
-    # Source the current shell's rc file
+    # Determine which rc to tell the user to source
+    local primary_rc
+    case "$USER_SHELL" in
+        zsh)  primary_rc="$HOME/.zshrc" ;;
+        bash) primary_rc="$HOME/.bashrc" ;;
+        *)    primary_rc="${shell_rcs[0]}" ;;
+    esac
+
+    # Source the current shell's rc file (may fail in non-interactive subshell — that's OK)
     if [ -n "$ZSH_VERSION" ]; then
         source "$HOME/.zshrc" 2>/dev/null || true
         success "Shell reloaded (.zshrc)"
@@ -369,7 +422,7 @@ setup_shell_integration() {
         source "$HOME/.bashrc" 2>/dev/null || true
         success "Shell reloaded (.bashrc)"
     else
-        warn "Run 'source ~/.zshrc' or 'source ~/.bashrc' or restart terminal to activate"
+        warn "Run 'source $(basename "$primary_rc")' or restart terminal to activate"
     fi
 }
 
@@ -483,16 +536,26 @@ show_usage() {
     fi
     TOTAL_COUNT=$((ECC_COUNT + CURATED_COUNT))
 
+    # Determine which rc file to tell the user to source
+    local reload_rc
+    case "$USER_SHELL" in
+        zsh)  reload_rc="~/.zshrc" ;;
+        bash) reload_rc="~/.bashrc" ;;
+        *)    reload_rc="~/.bashrc" ;;
+    esac
+
     cat << USAGE
 
 ╔══════════════════════════════════════════════════════════╗
-║   Installation Complete                                  ║
+║   Installation Complete ($OS_TYPE / $USER_SHELL)
 ╚══════════════════════════════════════════════════════════╝
 
 Skills loaded:
   - ECC skills:           $ECC_COUNT
   - Curated skills:       $CURATED_COUNT (Anthropic Official + Community + Codex)
   - Total:                $TOTAL_COUNT
+
+Activate:  source $reload_rc   (or restart terminal)
 
 All default commands now have skills:
   claude                    ollama launch claude
