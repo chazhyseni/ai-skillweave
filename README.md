@@ -435,13 +435,13 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 # Choose skill tier (default: full)
 ./scripts/setup-claude-desktop.sh --tier essential   # Personal learned skills only
-./scripts/setup-claude-desktop.sh --tier standard    # 53 skills (~54K tokens)
-./scripts/setup-claude-desktop.sh --tier full        # 91 skills (~89K tokens)
+./scripts/setup-claude-desktop.sh --tier standard    # Agents + top commands + personal
+./scripts/setup-claude-desktop.sh --tier full        # All universal skills + personal
 ```
 
 ### What gets configured
 
-**MCP servers** (9 total, same as CLI — zero token cost until invoked):
+**MCP servers** (7 from template + any API-key servers found in your CLI config — zero token cost until invoked):
 
 | Server | Purpose |
 |--------|---------|
@@ -452,16 +452,16 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 | `token-optimizer` | 95%+ context reduction via deduplication |
 | `playwright` | Browser automation |
 | `google-docs-editor` | Read/write Google Docs |
-| `github` | GitHub API (PAT copied from CLI config) |
-| `exa-web-search` | Neural web search (key copied from CLI config) |
+| `github` | GitHub API (copied from CLI config if configured) |
+| `exa-web-search` | Neural web search (copied from CLI config if configured) |
 
 **Curated skills** — built into `configs/claude-desktop-project-instructions.md`:
 
 | Tier | Skills | Size | Tokens | What's included |
 |------|--------|------|--------|-----------------|
 | `essential` | varies | varies | varies | Personal learned skills only (from `~/.claude/skills/learned/`) |
-| `standard` | 53 | 219KB | ~54K | + 27 universal agents + 23 top commands |
-| `full` | 91 | 358KB | ~89K | + ALL 60 universal commands |
+| `standard` | 50 + personal | ~220KB+ | ~55K+ | + 27 universal agents + 23 top commands |
+| `full` | 88 + personal | ~360KB+ | ~90K+ | + 27 universal agents + ALL ~61 universal commands |
 
 ### How to add skills to Claude Desktop
 
@@ -475,9 +475,9 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 | Component | Token cost |
 |-----------|-----------|
-| MCP servers (9) | Zero until invoked |
-| Skills (full tier) | ~89K tokens on first message, cached after that |
-| Skills (standard tier) | ~54K tokens on first message, cached after that |
+| MCP servers | Zero until invoked |
+| Skills (full tier) | ~90K+ tokens on first message, cached after that |
+| Skills (standard tier) | ~55K+ tokens on first message, cached after that |
 
 Skills are injected as Project instructions (system prompt) and cached by Claude after the first turn — similar to prompt caching in Claude Code CLI.
 
@@ -487,8 +487,8 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 |---------|----------------|-------------------|
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| MCP servers | 9 (auto-applied) | 9 (auto-applied, same set) |
-| Skills injection | 775 files via `--append-system-prompt-file` | 91 curated via Project instructions |
+| MCP servers | 7 auto + manual API-key servers | 7 auto + API-key servers copied from CLI |
+| Skills injection | ~775 files via `--append-system-prompt-file` | 88 + personal via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.zshrc` | N/A (GUI app) |
 
