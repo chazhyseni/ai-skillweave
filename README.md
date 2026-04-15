@@ -463,21 +463,26 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 | `standard` | 50 + personal | ~220KB+ | ~55K+ | + 27 universal agents + 23 top commands |
 | `full` | 88 + personal | ~360KB+ | ~90K+ | + 27 universal agents + ALL ~61 universal commands |
 
-### How skills get installed
+### How to install skills
 
-`setup-claude-desktop.sh` writes individual SKILL.md files directly into the Desktop app's local skills directory:
+Skills are packaged as `.skill` files (zip format with sanitized YAML frontmatter) and uploaded via the Desktop app's built-in upload feature.
 
-```text
-~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/{session}/{org}/skills/
+```bash
+# 1. Package all skills as .skill files
+./scripts/build-desktop-skills.sh                   # default: full tier
+./scripts/build-desktop-skills.sh --tier standard    # fewer skills
+
+# 2. Open the output folder
+open configs/desktop-skills/
 ```
 
-Skills appear in the Desktop app's **Skills** panel (Customize → Skills) automatically after restart.
+Then in Claude Desktop:
 
-1. Run `./scripts/setup-claude-desktop.sh` — configures MCP servers + installs skills
-2. Restart Claude Desktop app
-3. Skills appear in the Skills panel — no manual paste needed
+1. Go to **Customize** → **Skills**
+2. Click **+** → **Upload a skill**
+3. Select `.skill` files from `configs/desktop-skills/` (you can select multiple)
 
-To update skills later (e.g. after `update-ecc.sh`), re-run the setup script and restart Desktop.
+To update skills later (e.g. after `update-ecc.sh`), re-run `build-desktop-skills.sh` and re-upload.
 
 ### Token economics (Desktop)
 

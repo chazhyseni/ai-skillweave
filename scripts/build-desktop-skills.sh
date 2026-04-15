@@ -1,14 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# build-desktop-skills.sh — Install skills into Claude Desktop app
+# build-desktop-skills.sh — Package skills as .skill files for Claude Desktop
 # =============================================================================
-# Writes individual SKILL.md files into the Claude Desktop skills-plugin
-# directory AND registers them in manifest.json so the app loads them.
+# Creates individual .skill files (zip format) that can be uploaded via
+# Claude Desktop's "Upload a skill" button (Customize → Skills → + → Upload).
 #
-# Cross-platform:
-#   macOS:   ~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/
-#   Linux:   ~/.config/Claude/local-agent-mode-sessions/skills-plugin/  (expected)
-#   Windows: %APPDATA%\Claude\local-agent-mode-sessions\skills-plugin\  (expected)
+# Each .skill file contains a SKILL.md with sanitized YAML frontmatter
+# (only allowed keys: name, description, license, allowed-tools, metadata,
+# compatibility). ECC-specific keys like tools/model/origin are stripped.
 #
 # Tiers:
 #   essential  — Personal learned skills only
@@ -16,12 +15,14 @@
 #   full       — + ALL universal commands (default)
 #
 # Usage:
-#   scripts/build-desktop-skills.sh                   # Full tier (default)
+#   scripts/build-desktop-skills.sh                   # Full tier, output to configs/desktop-skills/
 #   scripts/build-desktop-skills.sh --tier essential
 #   scripts/build-desktop-skills.sh --tier standard
-#   scripts/build-desktop-skills.sh --tier full
 # =============================================================================
 set -e
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+OUTPUT_DIR="$REPO_DIR/configs/desktop-skills"
 
 BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()     { echo -e "${BLUE}[SKILLS]${NC} $1"; }
@@ -36,64 +37,14 @@ TIER="full"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tier) TIER="$2"; shift 2 ;;
+        --output) OUTPUT_DIR="$2"; shift 2 ;;
         *) shift ;;
     esac
 done
 
 log "Tier: $TIER"
-
-# =============================================================================
-# Detect Desktop skills directory + manifest
-# =============================================================================
-detect_skills_dir() {
-    local base=""
-    case "$(uname -s)" in
-        Darwin*)  base="$HOME/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin" ;;
-        Linux*)   base="$HOME/.config/Claude/local-agent-mode-sessions/skills-plugin" ;;
-        MINGW*|MSYS*|CYGWIN*)
-            if [ -n "$APPDATA" ]; then
-                base="$APPDATA/Claude/local-agent-mode-sessions/skills-plugin"
-            else
-                base="$HOME/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin"
-            fi
-            ;;
-    esac
-
-    if [ ! -d "$base" ]; then
-        warn "Skills-plugin directory not found: $base"
-        warn "Open Claude Desktop at least once, then re-run."
-        return 1
-    fi
-
-    # Find the most recent session with a manifest.json
-    local latest_org=""
-    local latest_time=0
-    for session_dir in "$base"/*/; do
-        [ -d "$session_dir" ] || continue
-        for org_dir in "$session_dir"*/; do
-            [ -f "$org_dir/manifest.json" ] || continue
-            local mtime
-            mtime=$(stat -f %m "$org_dir/manifest.json" 2>/dev/null || stat -c %Y "$org_dir/manifest.json" 2>/dev/null || echo 0)
-            if [ "$mtime" -gt "$latest_time" ]; then
-                latest_time=$mtime
-                latest_org="$org_dir"
-            fi
-        done
-    done
-
-    if [ -z "$latest_org" ]; then
-        warn "No active skills session with manifest.json found in $base"
-        return 1
-    fi
-
-    DESKTOP_SKILLS_DIR="${latest_org}skills"
-    DESKTOP_MANIFEST="${latest_org}manifest.json"
-    mkdir -p "$DESKTOP_SKILLS_DIR"
-    log "Skills dir: $DESKTOP_SKILLS_DIR"
-    log "Manifest:   $DESKTOP_MANIFEST"
-}
-
-detect_skills_dir || exit 1
+log "Output: $OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
 
 # =============================================================================
 # Skill lists
@@ -129,12 +80,10 @@ ALL_UNIVERSAL_COMMANDS=(
 )
 
 # =============================================================================
-# Collect skills to install, then write files + update manifest in one pass
+# Collect skill list
 # =============================================================================
-# Build a list of (skill_id, source_file) pairs
 SKILL_LIST=()
 
-# --- Personal learned skills (always) ---
 if [ -d "$LEARNED_DIR" ]; then
     for f in "$LEARNED_DIR"/*.md; do
         [ -f "$f" ] || continue
@@ -143,7 +92,6 @@ if [ -d "$LEARNED_DIR" ]; then
     done
 fi
 
-# --- Universal agents (standard + full) ---
 if [ "$TIER" = "standard" ] || [ "$TIER" = "full" ]; then
     for name in "${UNIVERSAL_AGENTS[@]}"; do
         f="$AGENTS_DIR/$name.md"
@@ -151,7 +99,6 @@ if [ "$TIER" = "standard" ] || [ "$TIER" = "full" ]; then
     done
 fi
 
-# --- Commands ---
 if [ "$TIER" = "standard" ]; then
     for name in "${TOP_COMMANDS[@]}"; do
         f="$COMMANDS_DIR/$name.md"
@@ -170,105 +117,155 @@ elif [ "$TIER" = "full" ]; then
     rm -f "$SEEN_FILE"
 fi
 
-log "Collected ${#SKILL_LIST[@]} skills to install"
+log "Collected ${#SKILL_LIST[@]} skills to package"
 
 # =============================================================================
-# Write skill files to disk + register in manifest.json
+# Package all skills as .skill files (sanitized zip)
 # =============================================================================
 python3 << PYEOF
-import json, os, re, shutil
+import json, os, re, zipfile, tempfile
+from pathlib import Path
 
-skills_dir = """$DESKTOP_SKILLS_DIR"""
-manifest_path = """$DESKTOP_MANIFEST"""
-
-# Parse skill list from bash
+output_dir = """$OUTPUT_DIR"""
 skill_entries = """$(IFS=$'\n'; echo "${SKILL_LIST[*]}")""".strip().split('\n')
 skill_entries = [s for s in skill_entries if '|' in s]
 
-# Load manifest
-with open(manifest_path) as f:
-    manifest = json.load(f)
+# Claude Desktop allowed frontmatter keys
+ALLOWED_KEYS = {'name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility'}
 
-existing_ids = {s['skillId'] for s in manifest['skills']}
-installed = 0
+def sanitize_frontmatter(content, skill_id):
+    """Strip disallowed YAML keys, truncate description, ensure valid frontmatter."""
+    if not content.startswith('---'):
+        # No frontmatter — create minimal one
+        desc = ''
+        for line in content.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#'):
+                desc = line[:1024]
+                break
+        return f'---\nname: {skill_id}\ndescription: "{desc}"\n---\n\n{content}'
+
+    parts = content.split('---', 2)
+    if len(parts) < 3:
+        return f'---\nname: {skill_id}\ndescription: "Skill {skill_id}"\n---\n\n{content}'
+
+    fm_raw = parts[1]
+    body = parts[2]
+
+    # Parse and rebuild frontmatter keeping only allowed keys
+    new_lines = []
+    lines = fm_raw.split('\n')
+    i = 0
+    has_name = False
+    has_desc = False
+    desc_value = ''
+
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r'^([a-z_-]+):\s*(.*)', line)
+        if m:
+            field = m.group(1)
+            value = m.group(2).strip()
+
+            if field not in ALLOWED_KEYS:
+                # Skip this field and any indented continuation lines
+                i += 1
+                while i < len(lines) and lines[i] and (lines[i].startswith('  ') or lines[i].startswith('\t')):
+                    i += 1
+                continue
+
+            if field == 'name':
+                has_name = True
+                # Ensure kebab-case, max 64 chars
+                clean_name = re.sub(r'[^a-z0-9-]', '-', skill_id.lower())[:64]
+                clean_name = re.sub(r'-+', '-', clean_name).strip('-')
+                new_lines.append(f'name: {clean_name}')
+                i += 1
+                continue
+
+            if field == 'description':
+                has_desc = True
+                if value in ('>', '>-', '|', '|-', ''):
+                    # Block scalar — collect continuation lines
+                    block = []
+                    i += 1
+                    while i < len(lines) and lines[i] and (lines[i].startswith('  ') or lines[i].startswith('\t')):
+                        block.append(lines[i].strip())
+                        i += 1
+                    desc_value = ' '.join(block)
+                else:
+                    desc_value = value.strip('"').strip("'")
+                    i += 1
+
+                # Sanitize: no angle brackets, max 1024 chars
+                desc_value = desc_value.replace('<', '').replace('>', '')[:1024]
+                desc_value = desc_value.replace('"', "'")
+                new_lines.append(f'description: "{desc_value}"')
+                continue
+
+            if field == 'metadata':
+                # Keep metadata block as-is
+                new_lines.append(line)
+                i += 1
+                while i < len(lines) and lines[i] and (lines[i].startswith('  ') or lines[i].startswith('\t')):
+                    new_lines.append(lines[i])
+                    i += 1
+                continue
+
+        new_lines.append(line)
+        i += 1
+
+    if not has_name:
+        clean_name = re.sub(r'[^a-z0-9-]', '-', skill_id.lower())[:64]
+        clean_name = re.sub(r'-+', '-', clean_name).strip('-')
+        new_lines.insert(0, f'name: {clean_name}')
+
+    if not has_desc:
+        # Extract from body
+        for line in body.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('---'):
+                desc_value = line[:1024].replace('<', '').replace('>', '').replace('"', "'")
+                break
+        new_lines.insert(1, f'description: "{desc_value}"')
+
+    return '---\n' + '\n'.join(new_lines) + '\n---' + body
+
+packaged = 0
+errors = []
 
 for entry in skill_entries:
     skill_id, source_file = entry.split('|', 1)
-
     if not os.path.isfile(source_file):
         continue
 
-    # Read source
     with open(source_file) as f:
         content = f.read()
 
-    # Extract description from YAML frontmatter or first non-empty line
-    desc = ""
-    if content.startswith("---"):
-        parts = content.split("---", 2)
-        if len(parts) >= 3:
-            fm = parts[1]
-            # Try to get description from frontmatter
-            m = re.search(r'^description:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
-            if m:
-                desc = m.group(1)[:300]
-            # If block scalar, get next lines
-            elif re.search(r'^description:\s*[>|]', fm, re.MULTILINE):
-                lines = fm.split('\n')
-                block = []
-                capture = False
-                for line in lines:
-                    if line.strip().startswith('description:'):
-                        capture = True
-                        continue
-                    if capture:
-                        if line.startswith('  ') or line.startswith('\t'):
-                            block.append(line.strip())
-                        else:
-                            break
-                desc = ' '.join(block)[:300]
+    sanitized = sanitize_frontmatter(content, skill_id)
 
-    if not desc:
-        # Fallback: first non-header, non-empty line
-        for line in content.split('\n'):
-            line = line.strip()
-            if line and not line.startswith('#') and not line.startswith('---'):
-                desc = line[:300]
-                break
+    # Create .skill zip
+    skill_file = os.path.join(output_dir, f'{skill_id}.skill')
+    try:
+        with zipfile.ZipFile(skill_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(f'{skill_id}/SKILL.md', sanitized)
+        packaged += 1
+    except Exception as e:
+        errors.append(f'{skill_id}: {e}')
 
-    # Ensure SKILL.md has frontmatter
-    if content.startswith("---"):
-        skill_content = content
-    else:
-        skill_content = f'---\nname: {skill_id}\ndescription: "{desc}"\n---\n\n{content}'
-
-    # Write SKILL.md
-    skill_path = os.path.join(skills_dir, skill_id)
-    os.makedirs(skill_path, exist_ok=True)
-    with open(os.path.join(skill_path, 'SKILL.md'), 'w') as f:
-        f.write(skill_content)
-
-    # Register in manifest if not already there
-    if skill_id not in existing_ids:
-        manifest['skills'].append({
-            'skillId': skill_id,
-            'name': skill_id,
-            'description': desc.replace('"', "'"),
-            'creatorType': 'user',
-            'updatedAt': None,
-            'enabled': True
-        })
-        existing_ids.add(skill_id)
-
-    installed += 1
-
-# Write updated manifest
-with open(manifest_path, 'w') as f:
-    json.dump(manifest, f, indent=2)
-
-print(f"Installed {installed} skills to disk + manifest ({len(manifest['skills'])} total in manifest)")
+print(f'Packaged {packaged} .skill files to {output_dir}')
+if errors:
+    print(f'Errors ({len(errors)}):')
+    for e in errors:
+        print(f'  {e}')
 PYEOF
 
-success "Skills installed into Claude Desktop (tier: $TIER)"
-success "Path: $DESKTOP_SKILLS_DIR"
-log "Restart Claude Desktop to load new skills."
+SKILL_COUNT=$(ls "$OUTPUT_DIR"/*.skill 2>/dev/null | wc -l | tr -d ' ')
+success "Packaged $SKILL_COUNT .skill files in $OUTPUT_DIR"
+echo ""
+log "To install in Claude Desktop:"
+log "  1. Open Claude Desktop → Customize → Skills"
+log "  2. Click '+' → 'Upload a skill'"
+log "  3. Select files from: $OUTPUT_DIR"
+log ""
+log "Or select all at once: open \"$OUTPUT_DIR\""
