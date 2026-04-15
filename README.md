@@ -74,6 +74,7 @@ agent_harness_modifications/
 ├── scripts/                      ← Individual setup scripts
 │   ├── setup-mcp.sh              ← Inject MCP into ~/.claude.json (CLI)
 │   ├── setup-claude-md.sh        ← Install global CLAUDE.md (MCP rules + conciseness)
+│   ├── setup-hooks.sh            ← Install PreToolUse hook (codesight-redirect)
 │   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
 │   ├── build-desktop-skills.sh   ← Package .skill files for Desktop upload
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
@@ -339,6 +340,33 @@ Running `./install.sh` on a new machine configures this automatically.
 
 Selective/on-demand loading requires the user to know which skills to activate. Full injection means Claude automatically applies relevant skills (TDD when writing tests, security review when touching auth, etc.) **without any explicit invocation** — which is the whole point.
 
+---
+
+## MCP Tool Enforcement
+
+Three layers ensure Claude actually uses MCP tools instead of raw file scanning:
+
+| Layer | Mechanism | Strength |
+| ----- | --------- | -------- |
+| `~/.claude/CLAUDE.md` | Global instructions loaded every session | Soft — can be ignored |
+| Skills cache preamble | Injected at top of `combined-skills.txt` | Soft — reinforces CLAUDE.md |
+| `hooks/codesight-redirect.sh` | PreToolUse hook blocks broad Glob/Grep | **Hard — actually stops the call** |
+
+### How the hook works
+
+When Claude attempts a broad codebase search (any `**` glob pattern or bare Glob in a codesight-enabled project), the hook:
+
+1. Detects `.codesight/` exists in the project tree
+2. Blocks the tool call (exit 2 → message sent back to Claude)
+3. Tells Claude to call `codesight_get_summary` first
+4. After the first reminder per session, allows all subsequent searches through (no repeated nagging)
+
+```bash
+# Hook fires on: Glob("**/*.ts"), Grep(path="/your/project", ...)
+# Passes through: Read("/path/to/specific/file.ts"), Grep("specific-function-name")
+```
+
+Installed by `setup-hooks.sh`, wired into `install.sh` alongside `setup-claude-md.sh`.
 
 ---
 
