@@ -463,26 +463,21 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 | `standard` | 50 + personal | ~220KB+ | ~55K+ | + 27 universal agents + 23 top commands |
 | `full` | 88 + personal | ~360KB+ | ~90K+ | + 27 universal agents + ALL ~61 universal commands |
 
-### How to add skills to Claude Desktop
+### How skills get installed
 
-> **Why is this manual?** Claude Desktop Projects are server-side (synced to claude.ai) — there is no local config file for project instructions. The Desktop config (`claude_desktop_config.json`) only supports `mcpServers`, `preferences`, and `bypassPermissions`. Skills must be pasted into a Project through the UI.
+`setup-claude-desktop.sh` writes individual SKILL.md files directly into the Desktop app's local skills directory:
 
-1. Run `./scripts/setup-claude-desktop.sh` — configures MCP servers + generates the skills file
-2. Copy skills to clipboard:
+```text
+~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/{session}/{org}/skills/
+```
 
-   ```bash
-   cat configs/claude-desktop-project-instructions.md | pbcopy   # macOS
-   # Linux: cat configs/claude-desktop-project-instructions.md | xclip -selection clipboard
-   # Windows: cat configs/claude-desktop-project-instructions.md | clip
-   ```
+Skills appear in the Desktop app's **Skills** panel (Customize → Skills) automatically after restart.
 
-3. Restart Claude Desktop app (so MCP servers load)
-4. In Claude Desktop, create a new **Project** (or open an existing one)
-5. Open Project **Settings** → **Custom Instructions**
-6. **Cmd+V** (or Ctrl+V) to paste the skills
-7. All conversations in that Project will have the skills active automatically
+1. Run `./scripts/setup-claude-desktop.sh` — configures MCP servers + installs skills
+2. Restart Claude Desktop app
+3. Skills appear in the Skills panel — no manual paste needed
 
-To update skills later (e.g. after `update-ecc.sh`), re-run the setup script and repeat steps 2-6.
+To update skills later (e.g. after `update-ecc.sh`), re-run the setup script and restart Desktop.
 
 ### Token economics (Desktop)
 
