@@ -407,7 +407,7 @@ npx codesight --open           # Generate interactive HTML report + open in brow
 npx codesight --max-tokens 50000  # Trim to fit token budget
 ```
 
-The `.codesight/` directory is gitignored (auto-regenerated), but `CLAUDE.md`, `.cursorrules`, `codex.md`, and `AGENTS.md` are committed to the repo so teammates get instant AI context.
+When you run `npx codesight --init` in your own project, it generates `CLAUDE.md`, `.cursorrules`, `codex.md`, and `AGENTS.md` — commit those to your repo so Claude Code always has project context. The `.codesight/` scan directory is gitignored since it rebuilds every time you run a scan.
 
 
 ---
