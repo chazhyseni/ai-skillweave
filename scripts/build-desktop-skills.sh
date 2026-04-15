@@ -2,8 +2,8 @@
 # =============================================================================
 # build-desktop-skills.sh — Install skills into Claude Desktop app
 # =============================================================================
-# Writes individual SKILL.md files directly into the Claude Desktop
-# skills-plugin directory. Skills appear in the Desktop app's Skills panel.
+# Writes individual SKILL.md files into the Claude Desktop skills-plugin
+# directory AND registers them in manifest.json so the app loads them.
 #
 # Cross-platform:
 #   macOS:   ~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/
@@ -17,25 +17,21 @@
 #
 # Usage:
 #   scripts/build-desktop-skills.sh                   # Full tier (default)
-#   scripts/build-desktop-skills.sh --tier essential   # Minimal
-#   scripts/build-desktop-skills.sh --tier standard    # Balanced
-#   scripts/build-desktop-skills.sh --tier full        # Everything universal
+#   scripts/build-desktop-skills.sh --tier essential
+#   scripts/build-desktop-skills.sh --tier standard
+#   scripts/build-desktop-skills.sh --tier full
 # =============================================================================
 set -e
-
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()     { echo -e "${BLUE}[SKILLS]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
-# Skill source directories
 LEARNED_DIR="$HOME/.claude/skills/learned"
 AGENTS_DIR="$HOME/.claude-everything-claude-code/agents"
 COMMANDS_DIR="$HOME/.claude-everything-claude-code/commands"
 
-# Parse args
 TIER="full"
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -47,7 +43,7 @@ done
 log "Tier: $TIER"
 
 # =============================================================================
-# Detect Desktop skills directory
+# Detect Desktop skills directory + manifest
 # =============================================================================
 detect_skills_dir() {
     local base=""
@@ -69,35 +65,38 @@ detect_skills_dir() {
         return 1
     fi
 
-    # Find the most recent session with an org subdirectory
-    local latest_session=""
+    # Find the most recent session with a manifest.json
+    local latest_org=""
     local latest_time=0
     for session_dir in "$base"/*/; do
         [ -d "$session_dir" ] || continue
         for org_dir in "$session_dir"*/; do
-            [ -d "$org_dir/skills" ] || continue
+            [ -f "$org_dir/manifest.json" ] || continue
             local mtime
-            mtime=$(stat -f %m "$org_dir/skills" 2>/dev/null || stat -c %Y "$org_dir/skills" 2>/dev/null || echo 0)
+            mtime=$(stat -f %m "$org_dir/manifest.json" 2>/dev/null || stat -c %Y "$org_dir/manifest.json" 2>/dev/null || echo 0)
             if [ "$mtime" -gt "$latest_time" ]; then
                 latest_time=$mtime
-                latest_session="$org_dir/skills"
+                latest_org="$org_dir"
             fi
         done
     done
 
-    if [ -z "$latest_session" ]; then
-        warn "No active skills session found in $base"
+    if [ -z "$latest_org" ]; then
+        warn "No active skills session with manifest.json found in $base"
         return 1
     fi
 
-    DESKTOP_SKILLS_DIR="$latest_session"
-    log "Desktop skills dir: $DESKTOP_SKILLS_DIR"
+    DESKTOP_SKILLS_DIR="${latest_org}skills"
+    DESKTOP_MANIFEST="${latest_org}manifest.json"
+    mkdir -p "$DESKTOP_SKILLS_DIR"
+    log "Skills dir: $DESKTOP_SKILLS_DIR"
+    log "Manifest:   $DESKTOP_MANIFEST"
 }
 
 detect_skills_dir || exit 1
 
 # =============================================================================
-# Skill lists by tier
+# Skill lists
 # =============================================================================
 UNIVERSAL_AGENTS=(
     performance-optimizer code-reviewer typescript-reviewer planner
@@ -130,74 +129,33 @@ ALL_UNIVERSAL_COMMANDS=(
 )
 
 # =============================================================================
-# Install a single skill into Desktop
+# Collect skills to install, then write files + update manifest in one pass
 # =============================================================================
-install_skill() {
-    local name="$1"
-    local source_file="$2"
-    local skill_dir="$DESKTOP_SKILLS_DIR/$name"
-
-    [ ! -f "$source_file" ] && return 1
-
-    mkdir -p "$skill_dir"
-
-    # Check if the source already has YAML frontmatter
-    if head -1 "$source_file" | grep -q "^---"; then
-        # Already has frontmatter — copy as-is
-        cp "$source_file" "$skill_dir/SKILL.md"
-    else
-        # No frontmatter — wrap it with name + description from first line
-        local desc
-        desc=$(head -5 "$source_file" | grep -v "^#" | grep -v "^$" | head -1 | cut -c1-200 | sed 's/"/'"'"'/g')
-        {
-            echo "---"
-            echo "name: $name"
-            echo "description: \"$desc\""
-            echo "---"
-            echo ""
-            cat "$source_file"
-        } > "$skill_dir/SKILL.md"
-    fi
-    return 0
-}
-
-# =============================================================================
-# Install skills by tier
-# =============================================================================
-LEARNED_COUNT=0
-AGENT_COUNT=0
-CMD_COUNT=0
+# Build a list of (skill_id, source_file) pairs
+SKILL_LIST=()
 
 # --- Personal learned skills (always) ---
 if [ -d "$LEARNED_DIR" ]; then
     for f in "$LEARNED_DIR"/*.md; do
         [ -f "$f" ] || continue
         name=$(basename "$f" .md)
-        if install_skill "learned-$name" "$f"; then
-            LEARNED_COUNT=$((LEARNED_COUNT + 1))
-        fi
+        SKILL_LIST+=("learned-$name|$f")
     done
 fi
-log "Installed $LEARNED_COUNT personal learned skills"
 
 # --- Universal agents (standard + full) ---
 if [ "$TIER" = "standard" ] || [ "$TIER" = "full" ]; then
     for name in "${UNIVERSAL_AGENTS[@]}"; do
         f="$AGENTS_DIR/$name.md"
-        if install_skill "agent-$name" "$f"; then
-            AGENT_COUNT=$((AGENT_COUNT + 1))
-        fi
+        [ -f "$f" ] && SKILL_LIST+=("agent-$name|$f")
     done
-    log "Installed $AGENT_COUNT agent skills"
 fi
 
-# --- Commands (standard: top 23, full: all) ---
+# --- Commands ---
 if [ "$TIER" = "standard" ]; then
     for name in "${TOP_COMMANDS[@]}"; do
         f="$COMMANDS_DIR/$name.md"
-        if install_skill "cmd-$name" "$f"; then
-            CMD_COUNT=$((CMD_COUNT + 1))
-        fi
+        [ -f "$f" ] && SKILL_LIST+=("cmd-$name|$f")
     done
 elif [ "$TIER" = "full" ]; then
     SEEN_FILE=$(mktemp)
@@ -206,17 +164,111 @@ elif [ "$TIER" = "full" ]; then
         if ! grep -qx "$name" "$SEEN_FILE" 2>/dev/null; then
             echo "$name" >> "$SEEN_FILE"
             f="$COMMANDS_DIR/$name.md"
-            if install_skill "cmd-$name" "$f"; then
-                CMD_COUNT=$((CMD_COUNT + 1))
-            fi
+            [ -f "$f" ] && SKILL_LIST+=("cmd-$name|$f")
         fi
     done
     rm -f "$SEEN_FILE"
 fi
-log "Installed $CMD_COUNT command skills"
 
-TOTAL=$((LEARNED_COUNT + AGENT_COUNT + CMD_COUNT))
-success "Installed $TOTAL skills into Claude Desktop (tier: $TIER)"
+log "Collected ${#SKILL_LIST[@]} skills to install"
+
+# =============================================================================
+# Write skill files to disk + register in manifest.json
+# =============================================================================
+python3 << PYEOF
+import json, os, re, shutil
+
+skills_dir = """$DESKTOP_SKILLS_DIR"""
+manifest_path = """$DESKTOP_MANIFEST"""
+
+# Parse skill list from bash
+skill_entries = """$(IFS=$'\n'; echo "${SKILL_LIST[*]}")""".strip().split('\n')
+skill_entries = [s for s in skill_entries if '|' in s]
+
+# Load manifest
+with open(manifest_path) as f:
+    manifest = json.load(f)
+
+existing_ids = {s['skillId'] for s in manifest['skills']}
+installed = 0
+
+for entry in skill_entries:
+    skill_id, source_file = entry.split('|', 1)
+
+    if not os.path.isfile(source_file):
+        continue
+
+    # Read source
+    with open(source_file) as f:
+        content = f.read()
+
+    # Extract description from YAML frontmatter or first non-empty line
+    desc = ""
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            fm = parts[1]
+            # Try to get description from frontmatter
+            m = re.search(r'^description:\s*["\']?(.+?)["\']?\s*$', fm, re.MULTILINE)
+            if m:
+                desc = m.group(1)[:300]
+            # If block scalar, get next lines
+            elif re.search(r'^description:\s*[>|]', fm, re.MULTILINE):
+                lines = fm.split('\n')
+                block = []
+                capture = False
+                for line in lines:
+                    if line.strip().startswith('description:'):
+                        capture = True
+                        continue
+                    if capture:
+                        if line.startswith('  ') or line.startswith('\t'):
+                            block.append(line.strip())
+                        else:
+                            break
+                desc = ' '.join(block)[:300]
+
+    if not desc:
+        # Fallback: first non-header, non-empty line
+        for line in content.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#') and not line.startswith('---'):
+                desc = line[:300]
+                break
+
+    # Ensure SKILL.md has frontmatter
+    if content.startswith("---"):
+        skill_content = content
+    else:
+        skill_content = f'---\nname: {skill_id}\ndescription: "{desc}"\n---\n\n{content}'
+
+    # Write SKILL.md
+    skill_path = os.path.join(skills_dir, skill_id)
+    os.makedirs(skill_path, exist_ok=True)
+    with open(os.path.join(skill_path, 'SKILL.md'), 'w') as f:
+        f.write(skill_content)
+
+    # Register in manifest if not already there
+    if skill_id not in existing_ids:
+        manifest['skills'].append({
+            'skillId': skill_id,
+            'name': skill_id,
+            'description': desc.replace('"', "'"),
+            'creatorType': 'user',
+            'updatedAt': None,
+            'enabled': True
+        })
+        existing_ids.add(skill_id)
+
+    installed += 1
+
+# Write updated manifest
+with open(manifest_path, 'w') as f:
+    json.dump(manifest, f, indent=2)
+
+print(f"Installed {installed} skills to disk + manifest ({len(manifest['skills'])} total in manifest)")
+PYEOF
+
+success "Skills installed into Claude Desktop (tier: $TIER)"
 success "Path: $DESKTOP_SKILLS_DIR"
-echo ""
 log "Restart Claude Desktop to load new skills."
