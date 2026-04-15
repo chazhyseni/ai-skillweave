@@ -168,6 +168,34 @@ if os.path.exists(cli_config_path):
 servers = template.get("mcpServers", {})
 added, updated, skipped = [], [], []
 
+import shutil, subprocess
+
+# Resolve absolute paths for npx/node — Claude Desktop GUI does NOT
+# inherit the user's shell PATH (no .zshrc, no nvm, no brew paths).
+def resolve_bin(name):
+    """Find absolute path for a binary, checking common locations."""
+    # Try shell's which first (works if this script runs from a shell)
+    result = shutil.which(name)
+    if result:
+        return result
+    # Common locations for nvm, homebrew, system
+    candidates = [
+        os.path.expanduser(f"~/.nvm/versions/node/*/bin/{name}"),
+        f"/opt/homebrew/bin/{name}",
+        f"/usr/local/bin/{name}",
+        f"/usr/bin/{name}",
+    ]
+    import glob
+    for pattern in candidates:
+        matches = sorted(glob.glob(pattern), reverse=True)  # newest first
+        if matches and os.path.isfile(matches[0]):
+            return matches[0]
+    return name  # fallback to bare name
+
+npx_abs = resolve_bin("npx")
+node_abs = resolve_bin("node")
+resolved = {}
+
 for name, cfg in {**servers, **api_key_servers}.items():
     # Substitute placeholders
     cfg_str = json.dumps(cfg)
@@ -180,6 +208,25 @@ for name, cfg in {**servers, **api_key_servers}.items():
         del cfg["env"]["NODE_EXTRA_CA_CERTS"]
         if not cfg["env"]:
             del cfg["env"]
+
+    # Fix malformed entries (e.g. github with command="github")
+    cmd = cfg.get("command", "")
+    if cmd not in ("npx", "node") and cmd not in (npx_abs, node_abs):
+        # Likely a malformed CLI copy — fix to npx
+        cfg["command"] = npx_abs
+        cfg["args"] = [a for a in cfg.get("args", []) if a != "npx"]
+        if not any(a.startswith("@") or a.startswith("-") for a in cfg.get("args", [])):
+            cfg["args"] = ["-y", f"@modelcontextprotocol/server-{name}"]
+        cfg.pop("type", None)
+        resolved[name] = f"fixed malformed command '{cmd}' -> {npx_abs}"
+
+    # Resolve bare npx/node to absolute paths (Desktop app has no shell PATH)
+    if cfg.get("command") == "npx":
+        cfg["command"] = npx_abs
+        resolved[name] = f"npx -> {npx_abs}"
+    elif cfg.get("command") == "node":
+        cfg["command"] = node_abs
+        resolved[name] = f"node -> {node_abs}"
 
     if name in config["mcpServers"] and not force:
         skipped.append(name)
@@ -196,6 +243,9 @@ print(f"Updated: {updated}")
 print(f"Skipped: {skipped}")
 total = list(config["mcpServers"].keys())
 print(f"Total MCP servers: {len(total)} — {total}")
+print(f"Binary paths: npx={npx_abs}, node={node_abs}")
+if resolved:
+    print(f"Path resolution: {resolved}")
 if api_key_servers:
     print(f"API-key servers copied from CLI config: {list(api_key_servers.keys())}")
 PYEOF
