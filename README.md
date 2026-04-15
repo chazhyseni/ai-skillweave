@@ -256,42 +256,29 @@ OpenClaw's native subagent system works via `~/.openclaw/subagents/`. After setu
 
 This repo is built on top of **[Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code)** — a community-maintained library of production-ready skills covering every domain of software development: testing, architecture, security, cloud deployment, language-specific patterns, and more.
 
-### What ECC Is
+ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *how to think* about specific tasks — when to activate, how to approach the problem, examples, and pitfalls.
 
-ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *how to think* about specific tasks. Each skill covers: when to activate, how to approach the problem, examples, and pitfalls. They're harness-agnostic by design.
-
-### Skill Counts (verified)
+### Skill Sources
 
 | Source | Skills | Notes |
 |--------|--------|-------|
-| ECC core | 183 SKILL.md dirs | 185 total dirs, 2 are local-only (learned + project-guidelines-example) |
-| Anthropic official | 64 | In `anthropic-official/skills/` subdir (excludes README/docs) |
-| OpenAI Codex | **469** (all loaded) | In `openai-codex/skills/`; previously capped at 100, now uncapped |
-| Community curated | 0 (catalog only) | Web-based skill index, no downloadable files |
+| ECC core | 183 SKILL.md dirs | From `affaan-m/everything-claude-code` |
+| Anthropic official | 17 SKILL.md dirs (64 total .md) | From Anthropic's official skills library |
+| OpenAI Codex curated | 44 SKILL.md dirs (469 total .md) | From OpenAI's Codex skills collection |
 | Personal learned | varies | Your own patterns extracted from sessions |
-| **Claude Code cache total** | **~775 files → 1.16MB** | Combined into `combined-skills.txt` |
 
-### What ai-skillweave Adds
+### What Each Harness Gets
 
-ECC was originally built for Claude Code. **ai-skillweave extends it across every `ollama launch` harness.**
+| Harness | Skills | How they load |
+|---------|--------|--------------|
+| `ollama launch claude` | **~775 .md files → 1.16MB** | Full content injected via `--append-system-prompt-file` |
+| `ollama launch openclaw` | **244 skill dirs** | Real SKILL.md copies, YAML-sanitized for compatibility |
+| `ollama launch pi` | **244 skill dirs** | Symlinks to all skill source dirs |
+| `ollama launch codex` | **~289 skill dirs** | Symlinks + YAML-sanitized copies + 46 native Codex skills |
 
-All harnesses get the same **240 structured skill entry points** (183 ECC + 17 Anthropic official + 44 Codex curated). The apparent "775 vs 244" discrepancy is **not a gap** — it's a difference in how content is counted:
+Claude Code's 775 is the full text content of all skill files concatenated (including theme variants, reference docs, supporting files). Other harnesses use SKILL.md entry points — the structured skill definitions that trigger on the right tasks.
 
-| What's counted | Claude Code | OpenClaw / Pi / Codex |
-|----------------|-------------|----------------------|
-| **SKILL.md entry points** (the actual skills) | **240** | **240–289** |
-| Raw `.md` files in injection | **~775** | N/A |
-
-The 775 `.md` files include supporting content within each skill directory (e.g., theme variants, reference docs, spec files) that get text-concatenated into Claude's system prompt. OpenClaw/Pi/Codex load skills via the `SKILL.md` entry-point format, which points to the same skill logic.
-
-| Harness | Skill dirs | How they load |
-|---------|-----------|--------------|
-| `ollama launch claude` | 240 structured skills + ~535 supporting .md files | All text injected via `--append-system-prompt-file` |
-| `ollama launch openclaw` | **244** (240 unified + 3 personal learned + extras) | Real SKILL.md copies, YAML-sanitized |
-| `ollama launch pi` | **244** (same) | Symlinks to skill source dirs |
-| `ollama launch codex` | **~289** (244 + 46 native Codex) | Symlinks + YAML-sanitized copies |
-
-> **YAML sanitization:** Skills with block-scalar descriptions or extra fields (`homepage`, `license`, `version`, `metadata`) are automatically sanitized on-the-fly without modifying source files.
+> **YAML sanitization:** Skills with block-scalar descriptions or extra metadata fields are automatically sanitized on-the-fly without modifying source files.
 
 ### Cross-Harness Skill Sync
 
