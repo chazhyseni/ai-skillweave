@@ -145,6 +145,8 @@ if should_run "claude"; then
     fi
     # Global CLAUDE.md: proactive MCP usage + conciseness + token discipline
     bash "$REPO_DIR/scripts/setup-claude-md.sh" && success "Global CLAUDE.md installed"
+    # Pre-tool-use hooks: enforce codesight before broad Glob/Grep searches
+    bash "$REPO_DIR/scripts/setup-hooks.sh" && success "Claude Code hooks installed"
 fi
 
 # =============================================================================
