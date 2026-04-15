@@ -64,7 +64,7 @@ agent_harness_modifications/
 ├── configs/                      ← Portable config templates
 │   ├── claude-mcp-servers.json   ← MCP servers for Claude Code CLI
 │   ├── claude-desktop-mcp-servers.json  ← MCP servers for Claude Desktop GUI
-│   ├── claude-desktop-project-instructions.md ← Curated skills for Desktop Project (generated)
+│   ├── global-claude-md.md       ← Global CLAUDE.md template (MCP rules + conciseness)
 │   ├── openclaw.json             ← OpenClaw config (web tools enabled)
 │   ├── codex-config.toml         ← Codex ollama-launch provider config
 │   ├── pi-settings.json          ← Pi agent settings
@@ -73,8 +73,9 @@ agent_harness_modifications/
 │
 ├── scripts/                      ← Individual setup scripts
 │   ├── setup-mcp.sh              ← Inject MCP into ~/.claude.json (CLI)
+│   ├── setup-claude-md.sh        ← Install global CLAUDE.md (MCP rules + conciseness)
 │   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
-│   ├── build-desktop-skills.sh   ← Generate curated skills file (essential/standard/full)
+│   ├── build-desktop-skills.sh   ← Package .skill files for Desktop upload
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
 │   ├── setup-codex.sh            ← Apply Codex config
 │   ├── setup-pi.sh               ← Apply Pi settings

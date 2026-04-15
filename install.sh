@@ -134,7 +134,7 @@ if should_run "ollama" || [ -z "$ONLY_TARGET" ]; then
 fi
 
 # =============================================================================
-# Step 2: Claude Code MCP
+# Step 2: Claude Code MCP + Global Instructions
 # =============================================================================
 if should_run "claude"; then
     section "Claude Code MCP"
@@ -143,6 +143,8 @@ if should_run "claude"; then
     else
         warn "~/.claude.json not found — run Claude Code once to initialize, then re-run install.sh"
     fi
+    # Global CLAUDE.md: proactive MCP usage + conciseness + token discipline
+    bash "$REPO_DIR/scripts/setup-claude-md.sh" && success "Global CLAUDE.md installed"
 fi
 
 # =============================================================================

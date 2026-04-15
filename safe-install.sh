@@ -177,6 +177,22 @@ create_loader() {
     COMBINED_FILE="$SKILLS_CACHE_DIR/combined-skills.txt"
     > "$COMBINED_FILE"  # Truncate/create file
 
+    # Preamble: conciseness + MCP usage rules (injected at top of system prompt)
+    cat >> "$COMBINED_FILE" << 'PREAMBLE'
+# CRITICAL INSTRUCTIONS — READ FIRST
+
+## Conciseness
+- Be terse. No trailing summaries, status tables, or "here's what I did" recaps.
+- Show the change, not paragraphs explaining the change.
+
+## Use MCP tools PROACTIVELY
+- Use codesight_get_summary BEFORE exploring a codebase with Grep/Glob/Read.
+- Use smart_read (token-optimizer) instead of Read for large files.
+- Use context7 query-docs BEFORE answering library/framework questions from training data.
+- Use exa-web-search for anything that may have changed since training cutoff.
+
+PREAMBLE
+
     # Add learned skills first (your personal skills - always included)
     if [ -d "$CLAUDE_DIR/skills/learned" ]; then
         for skill in "$CLAUDE_DIR/skills/learned"/*.md; do
