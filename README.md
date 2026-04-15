@@ -23,11 +23,12 @@ If you find the skills useful, go star ⭐ [affaan-m/everything-claude-code](htt
 git clone https://github.com/chazhyseni/ai-skillweave ~/scripts/agent_harness_modifications
 cd ~/scripts/agent_harness_modifications
 
-# 2. Install everything
+# 2. Install everything (auto-detects macOS/Linux/WSL)
 ./install.sh
 
-# 3. Reload shell
-source ~/.zshrc
+# 3. Reload shell (install.sh tells you which file)
+source ~/.bashrc   # Linux/WSL
+source ~/.zshrc    # macOS
 
 # 4. Launch any harness
 ollama launch claude      # Claude Code + MCP tools
@@ -47,8 +48,9 @@ ollama launch codex       # Codex via Ollama backend
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
 | **Codex** | Configures `ollama-launch` provider + `danger-full-access` sandbox in `~/.codex/config.toml` |
 | **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (minimax for claude/cline/codex, qwen for openclaw/pi) |
-| **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.zshrc` |
-| **ECC Skills** | Installs ECC + Anthropic official + 469 Codex skills (~775 files → 1.16MB cache) |
+| **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
+| **Claude Code skills** | Copies ECC SKILL.md files to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
+| **ECC Skills cache** | Combined skills cache at `~/.claude/skills-cache/combined-skills.txt` for system prompt injection |
 
 ---
 
@@ -95,6 +97,19 @@ agent_harness_modifications/
 
 ---
 
+## Platform Support
+
+| Platform | Status | Shell | Notes |
+|----------|--------|-------|-------|
+| **macOS** | ✅ Tested | zsh (default) | Homebrew for dependencies |
+| **Linux** | ✅ Tested | bash (default) | apt/dnf/pacman auto-detected |
+| **Windows (WSL)** | ✅ Supported | bash | Run inside WSL — native Windows is not supported |
+| **Windows (native)** | ⚠️ Limited | — | Use WSL instead; installer warns if run from Git Bash/MSYS2 |
+
+`install.sh` auto-detects the platform and user shell, installs skills into the correct RC file (`~/.bashrc` or `~/.zshrc`), and shows platform-appropriate messages.
+
+---
+
 ## Before You Begin — First-Time Setup
 
 Run these steps **once** on a new machine before cloning this repo.
@@ -102,12 +117,17 @@ Run these steps **once** on a new machine before cloning this repo.
 ### 1. Install Ollama
 
 ```bash
-# macOS — download the app (recommended) or use brew:
+# macOS:
 brew install ollama
-# or: download from https://ollama.com and open /Applications/Ollama.app
-```
+# or download from https://ollama.com
 
-After installing, Ollama runs as a menubar app. Make sure it's running before launching any harness.
+# Linux (Debian/Ubuntu):
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Start the server:
+ollama serve          # Linux (or use systemd)
+# macOS: open /Applications/Ollama.app (runs as menubar app)
+```
 
 ### 2. Pull a model (or use cloud models)
 
@@ -122,7 +142,17 @@ ollama pull llama3.2:3b           # fast, good for subagents
 ### 3. Install Node.js (for MCP servers)
 
 ```bash
+# macOS:
 brew install node
+
+# Linux (Debian/Ubuntu):
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Or use nvm (any platform):
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | bash
+nvm install --lts
+
 # Verify: node --version  (needs v18+)
 ```
 
@@ -154,28 +184,37 @@ ollama launch pi
 npm install -g @openai/codex
 ```
 
-> **Note:** OpenClaw, Pi, and Codex are optional. `install.sh` will skip harnesses that aren't installed and show a warning.
+> **Note:** OpenClaw, Pi, and Codex are optional. `install.sh` will skip harnesses that aren't installed and show a warning. Ollama is also optional — the installer warns but continues without it.
 
-### 6. Install Python 3 (usually pre-installed on macOS)
+### 6. Install Python 3
 
 ```bash
-# Check: python3 --version  (needs 3.8+)
-# If missing: brew install python3
+# Check if already installed:
+python3 --version  # needs 3.8+
+
+# macOS:
+brew install python3
+
+# Linux (Debian/Ubuntu):
+sudo apt-get install python3
+
+# Linux (Fedora/RHEL):
+sudo dnf install python3
 ```
 
 ---
 
 ## Prerequisites Summary
 
-| Tool | Required? | One-line install |
-|------|-----------|-----------------|
-| [Ollama](https://ollama.com) | ✅ Required | Download app or `brew install ollama` |
-| Python 3 | ✅ Required | Pre-installed on macOS, or `brew install python3` |
-| Node.js | ✅ Required | `brew install node` |
-| Claude Code | ✅ Required | `npm install -g @anthropic-ai/claude-code` + `claude auth login` |
-| OpenClaw | Optional | `ollama launch openclaw --config` (first run installs) |
-| Pi | Optional | `ollama launch pi` (first run installs) |
-| Codex | Optional | `npm install -g @openai/codex` |
+| Tool | Required? | macOS | Linux |
+|------|-----------|-------|-------|
+| [Ollama](https://ollama.com) | Optional (warn) | `brew install ollama` | `curl -fsSL https://ollama.com/install.sh \| sh` |
+| Python 3 | ✅ Required | `brew install python3` | `apt install python3` or `dnf install python3` |
+| Node.js | ✅ Required | `brew install node` | `apt install nodejs` or use nvm |
+| Claude Code | ✅ Required | `npm install -g @anthropic-ai/claude-code` | Same |
+| OpenClaw | Optional | `ollama launch openclaw --config` | Same |
+| Pi | Optional | `ollama launch pi` | Same |
+| Codex | Optional | `npm install -g @openai/codex` | Same |
 
 ---
 
@@ -277,14 +316,14 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 
 | Harness | Skills | How they load |
 |---------|--------|--------------|
-| `ollama launch claude` | **~775 .md files → 1.16MB** | Full content injected via `--append-system-prompt-file` |
-| `ollama launch openclaw` | **244 skill dirs** | Real SKILL.md copies, YAML-sanitized for compatibility |
-| `ollama launch pi` | **244 skill dirs** | Symlinks to all skill source dirs |
-| `ollama launch codex` | **~289 skill dirs** | Symlinks + YAML-sanitized copies + 46 native Codex skills |
+| `claude` / `ollama launch claude` | **183 native + ~6K line cache** | SKILL.md → `~/.claude/skills/` (native `/skills`) + full cache via `--append-system-prompt-file` |
+| `ollama launch openclaw` | **183 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
+| `ollama launch pi` | **183 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
+| `ollama launch codex` | **183 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
 
-Claude Code's 775 is the full text content of all skill files concatenated (including theme variants, reference docs, supporting files). Other harnesses use SKILL.md entry points — the structured skill definitions that trigger on the right tasks.
+Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
-> **YAML sanitization:** Skills with block-scalar descriptions or extra metadata fields are automatically sanitized on-the-fly without modifying source files.
+> **YAML sanitization:** Skills with block-scalar descriptions, extra metadata fields (author, version, tags), or nested YAML mappings are automatically sanitized without modifying source files.
 
 ### Cross-Harness Skill Sync
 
@@ -446,9 +485,9 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 | Platform | Config path | Status |
 |----------|------------|--------|
-| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` | Tested |
-| **Linux** | `~/.config/Claude/claude_desktop_config.json` | Supported (untested) |
-| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | Supported via Git Bash/WSL (untested) |
+| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` | ✅ Tested |
+| **Linux** | `~/.config/Claude/claude_desktop_config.json` | ✅ Tested |
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` | Supported via WSL (untested) |
 
 ### Quick setup
 
@@ -532,7 +571,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 | MCP servers | 7 auto + manual API-key servers | 7 auto + API-key servers copied from CLI |
 | Skills injection | ~775 files via `--append-system-prompt-file` | 88 + personal via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
-| Shell wrappers | `_claude_with_skills` in `.zshrc` | N/A (GUI app) |
+| Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
 ---
 
