@@ -23,6 +23,41 @@ set -e
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# =============================================================================
+# Platform detection
+# =============================================================================
+case "$(uname -s)" in
+    Darwin*)                 OS_TYPE="macOS" ;;
+    Linux*)                  OS_TYPE="Linux" ;;
+    MINGW*|MSYS*|CYGWIN*)   OS_TYPE="Windows" ;;
+    *)                       OS_TYPE="Unknown" ;;
+esac
+
+# Detect user's login shell for RC file references
+case "${SHELL##*/}" in
+    zsh)  USER_SHELL="zsh";  SHELL_RC="~/.zshrc" ;;
+    bash) USER_SHELL="bash"; SHELL_RC="~/.bashrc" ;;
+    *)    USER_SHELL="bash"; SHELL_RC="~/.bashrc" ;;
+esac
+
+# Platform-aware package install hint
+case "$OS_TYPE" in
+    macOS)   PKG_HINT="brew install" ;;
+    Linux)
+        if command -v apt-get >/dev/null 2>&1; then
+            PKG_HINT="apt-get install"
+        elif command -v dnf >/dev/null 2>&1; then
+            PKG_HINT="dnf install"
+        elif command -v pacman >/dev/null 2>&1; then
+            PKG_HINT="pacman -S"
+        else
+            PKG_HINT="your package manager to install"
+        fi
+        ;;
+    Windows) PKG_HINT="your package manager to install" ;;
+    *)       PKG_HINT="your package manager to install" ;;
+esac
+
 BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()     { echo -e "${BLUE}[INSTALL]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
@@ -63,24 +98,32 @@ echo "╔═══════════════════════�
 echo "║   Ollama Agent Harness — Full Setup                     ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-log "Model: $OLLAMA_MODEL"
-log "Repo:  $REPO_DIR"
+log "Platform: $OS_TYPE ($USER_SHELL)"
+log "Model:    $OLLAMA_MODEL"
+log "Repo:     $REPO_DIR"
 echo ""
+
+if [ "$OS_TYPE" = "Windows" ]; then
+    warn "Native Windows detected. This installer targets bash-based systems."
+    warn "For best results, run inside WSL (Windows Subsystem for Linux)."
+    warn "Continuing anyway — some steps may not apply."
+    echo ""
+fi
 
 # =============================================================================
 # Step 0: Preflight checks
 # =============================================================================
 section "Preflight"
 
-command -v python3 >/dev/null 2>&1 || error "python3 required (brew install python3)"
-command -v node >/dev/null 2>&1 || warn "node not found — npx-based MCP servers won't work (brew install node)"
+command -v python3 >/dev/null 2>&1 || error "python3 required ($PKG_HINT python3)"
+command -v node >/dev/null 2>&1 || warn "node not found — npx-based MCP servers won't work ($PKG_HINT node)"
 command -v git >/dev/null 2>&1 || warn "git not found — ECC skills install will be skipped"
 
 if command -v ollama >/dev/null 2>&1; then
     success "ollama: $(command -v ollama)"
     if curl -s --max-time 3 http://localhost:11434/api/status >/dev/null 2>&1; then
         success "Ollama server: running"
-        
+
         # Check if requested model is available
         if ollama list 2>/dev/null | grep -q "^${OLLAMA_MODEL}"; then
             success "Model available: $OLLAMA_MODEL"
@@ -89,15 +132,20 @@ if command -v ollama >/dev/null 2>&1; then
             warn "If local model needed: ollama pull $OLLAMA_MODEL"
         fi
     else
-        warn "Ollama server not running — start it: open /Applications/Ollama.app"
+        if [ "$OS_TYPE" = "macOS" ]; then
+            warn "Ollama server not running — start it: open /Applications/Ollama.app"
+        else
+            warn "Ollama server not running — start it: ollama serve"
+        fi
         warn "Continuing setup; start Ollama before using harnesses"
     fi
 else
-    error "ollama not installed. Install from https://ollama.com then re-run."
+    warn "ollama not installed — install from https://ollama.com"
+    warn "Continuing setup without Ollama; harnesses that need it will fail at runtime"
 fi
 
-# Disable Zscaler tray if running (no sudo needed)
-if launchctl list 2>/dev/null | grep -q "zscaler"; then
+# Disable Zscaler tray if running (macOS only, no sudo needed)
+if [ "$OS_TYPE" = "macOS" ] && launchctl list 2>/dev/null | grep -q "zscaler"; then
     log "Detected Zscaler — disabling tray (no sudo needed)..."
     bash "$REPO_DIR/scripts/disable-zscaler.sh" --tray 2>/dev/null || true
 fi
@@ -112,10 +160,15 @@ should_run() {
 
 if ! $SKIP_SKILLS && should_run "skills"; then
     section "Skills Layer"
-    # safe-install.sh exits non-zero when 'source ~/.zshrc' fails in a non-interactive
-    # subshell — this is expected and harmless. Ignore the exit code.
-    bash "$REPO_DIR/safe-install.sh" || true
-    success "ECC skills + shell wrappers installed (run: source ~/.zshrc to activate)"
+    # safe-install.sh may exit non-zero when 'source <rc>' fails in a non-interactive
+    # subshell — this is expected and harmless. Capture exit code to report real failures.
+    safe_exit=0
+    bash "$REPO_DIR/safe-install.sh" || safe_exit=$?
+    if [ "$safe_exit" -eq 0 ]; then
+        success "ECC skills + shell wrappers installed (run: source $SHELL_RC to activate)"
+    else
+        warn "safe-install.sh exited with code $safe_exit — shell integration may need manual source $SHELL_RC"
+    fi
     # Rebuild cache with full skill counts (safe-install.sh caps Codex at 100).
     # update-ecc.sh also restores ECC working tree to actual HEAD.
     log "Rebuilding skills cache with full counts..."
@@ -178,10 +231,10 @@ fi
 # =============================================================================
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║   Setup Complete                                         ║"
+echo "║   Setup Complete ($OS_TYPE / $USER_SHELL)"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
-echo "  Reload shell:   source ~/.zshrc"
+echo "  Reload shell:   source $SHELL_RC"
 echo ""
 echo "  Launch harnesses:"
 echo "    ollama launch claude      → Claude Code with MCP + skills"
@@ -191,9 +244,11 @@ echo "    ollama launch codex       → Codex via ollama-launch provider"
 echo ""
 echo "  Health check:   ./install.sh --verify"
 echo ""
-echo "  Zscaler (if needed after reboot):"
-echo "    scripts/disable-zscaler.sh"
-echo "    # Then (in Terminal with sudo):"
-echo "    sudo launchctl unload /Library/LaunchDaemons/com.zscaler.service.plist"
-echo "    sudo launchctl unload /Library/LaunchDaemons/com.zscaler.tunnel.plist"
-echo ""
+if [ "$OS_TYPE" = "macOS" ]; then
+    echo "  Zscaler (if needed after reboot):"
+    echo "    scripts/disable-zscaler.sh"
+    echo "    # Then (in Terminal with sudo):"
+    echo "    sudo launchctl unload /Library/LaunchDaemons/com.zscaler.service.plist"
+    echo "    sudo launchctl unload /Library/LaunchDaemons/com.zscaler.tunnel.plist"
+    echo ""
+fi
