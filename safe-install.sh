@@ -438,6 +438,30 @@ link_native_skills() {
         return 0
     fi
 
+    # Claude Code: ~/.claude/skills/<skill-name>.md (flat markdown files)
+    # This is what Claude Code's /skills command reads. Skills placed here work
+    # regardless of launch method (direct, ollama launch, VSCode extension).
+    local claude_skills_dir="$HOME/.claude/skills"
+    mkdir -p "$claude_skills_dir"
+    local claude_count=0
+    for dir in "$ECC_DIR/skills"/*/; do
+        skill_name=$(basename "$dir")
+        # Use SKILL.md if it exists, otherwise find any .md
+        local src_file=""
+        if [ -f "$dir/SKILL.md" ]; then
+            src_file="$dir/SKILL.md"
+        else
+            src_file=$(find "$dir" -maxdepth 1 -name '*.md' -type f 2>/dev/null | head -1)
+        fi
+        [ -z "$src_file" ] && continue
+        local dst="$claude_skills_dir/${skill_name}.md"
+        if [ ! -f "$dst" ]; then
+            cp "$src_file" "$dst"
+            claude_count=$((claude_count + 1))
+        fi
+    done
+    success "Claude Code: $claude_count ECC skills installed to ~/.claude/skills/ ($(ls "$claude_skills_dir"/*.md 2>/dev/null | wc -l | tr -d ' ') total)"
+
     # Codex: handled by update-ecc.sh which properly sanitizes YAML (symlinks
     # for clean skills, sanitized copies for skills with block scalars/extra fields).
     # safe-install.sh used to skip invalid skills entirely — update-ecc.sh fixes them.
@@ -513,6 +537,11 @@ uninstall() {
     rm -rf "$ECC_DIR"
     rm -rf "$CURATED_DIR"
     rm -rf "$SKILLS_CACHE_DIR"
+    # Remove Claude Code native skills (only ECC-originated ones)
+    if [ -d "$HOME/.claude/skills" ]; then
+        rm -rf "$HOME/.claude/skills"
+        success "Removed ~/.claude/skills/"
+    fi
 
     success "Uninstall complete"
     echo ""
