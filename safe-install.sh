@@ -369,28 +369,11 @@ link_native_skills() {
         return 0
     fi
 
-    # Codex: ~/.codex/skills/<skill-name>/ (each MUST have SKILL.md with simple frontmatter)
-    # Codex's strict Rust YAML parser rejects:
-    #   - Block scalars (description: >- or description: |)
-    #   - Extra metadata fields beyond name/description/origin/tools
+    # Codex: handled by update-ecc.sh which properly sanitizes YAML (symlinks
+    # for clean skills, sanitized copies for skills with block scalars/extra fields).
+    # safe-install.sh used to skip invalid skills entirely — update-ecc.sh fixes them.
     if [ -d "$HOME/.codex/skills" ]; then
-        local codex_count=0
-        for dir in "$ECC_DIR/skills"/*/; do
-            skill_name=$(basename "$dir")
-            # Skip dirs without SKILL.md
-            [ ! -f "$dir/SKILL.md" ] && continue
-            # Skip block scalar descriptions (>-, >, |-, |) - break codex YAML parser
-            grep -q '^description: *[>|]' "$dir/SKILL.md" 2>/dev/null && continue
-            # Skip files with extra metadata fields (license, version, homepage, etc.)
-            if grep -E '^[a-z_]+:' "$dir/SKILL.md" 2>/dev/null | grep -qvE '^(name|description|origin|tools):'; then
-                continue
-            fi
-            if [ ! -e "$HOME/.codex/skills/$skill_name" ]; then
-                ln -s "$dir" "$HOME/.codex/skills/$skill_name"
-                codex_count=$((codex_count + 1))
-            fi
-        done
-        success "Codex: $codex_count ECC skills linked ($(ls "$HOME/.codex/skills/" | wc -l | tr -d ' ') total)"
+        log "Codex skills will be synced by update-ecc.sh (proper YAML sanitization)"
     else
         warn "~/.codex/skills not found — install Codex CLI first"
     fi
