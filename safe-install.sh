@@ -490,11 +490,12 @@ setup_shell_integration() {
     esac
 
     # Source the current shell's rc file (may fail in non-interactive subshell — that's OK)
+    # Use subshell to prevent set -e from catching failures inside sourced rc
     if [ -n "$ZSH_VERSION" ]; then
-        source "$HOME/.zshrc" 2>/dev/null || true
+        (source "$HOME/.zshrc" 2>/dev/null) || true
         success "Shell reloaded (.zshrc)"
     elif [ -n "$BASH_VERSION" ]; then
-        source "$HOME/.bashrc" 2>/dev/null || true
+        (source "$HOME/.bashrc" 2>/dev/null) || true
         success "Shell reloaded (.bashrc)"
     else
         warn "Run 'source $(basename "$primary_rc")' or restart terminal to activate"
@@ -535,7 +536,12 @@ link_native_skills() {
             claude_count=$((claude_count + 1))
         fi
     done
-    success "Claude Code: $claude_count ECC skills installed to ~/.claude/skills/ ($(ls "$claude_skills_dir"/*.md 2>/dev/null | wc -l | tr -d ' ') total)"
+    local total_count=$(ls "$claude_skills_dir"/*.md 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$claude_count" -eq 0 ] && [ "$total_count" -gt 0 ]; then
+        success "Claude Code: all ECC skills already in ~/.claude/skills/ ($total_count total)"
+    else
+        success "Claude Code: $claude_count ECC skills installed to ~/.claude/skills/ ($total_count total)"
+    fi
 
     # Codex: handled by update-ecc.sh which properly sanitizes YAML (symlinks
     # for clean skills, sanitized copies for skills with block scalars/extra fields).
