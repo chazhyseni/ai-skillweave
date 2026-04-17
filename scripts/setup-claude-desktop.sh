@@ -142,8 +142,12 @@ ca_cert = "$CA_CERT"
 home = os.path.expanduser("~")
 force = $([[ "$FORCE" == "true" ]] && echo "True" || echo "False")
 
-with open(config_path) as f:
-    config = json.load(f)
+try:
+    with open(config_path) as f:
+        config = json.load(f)
+except json.JSONDecodeError:
+    print(f"WARNING: Existing Desktop config is invalid JSON — resetting to empty config")
+    config = {}
 
 with open(template_path) as f:
     template = json.load(f)
@@ -151,7 +155,20 @@ with open(template_path) as f:
 if "mcpServers" not in config:
     config["mcpServers"] = {}
 
+# Remove broken HTTP-type entries that Claude Desktop doesn't support
+# (Desktop only supports stdio-based servers with command/args)
+removed_http = []
+for name in list(config["mcpServers"].keys()):
+    entry = config["mcpServers"][name]
+    if entry.get("type") == "http" or (not entry.get("command") and not entry.get("args")):
+        del config["mcpServers"][name]
+        removed_http.append(name)
+if removed_http:
+    print(f"Removed unsupported HTTP-type servers from Desktop config: {removed_http}")
+    print(f"  (HTTP servers like skillgraph only work in Claude Code CLI, not Desktop)")
+
 # Load CLI config to copy API-key servers (github, exa-web-search)
+# Only copy stdio-based servers — skip HTTP-type
 api_key_servers = {}
 if os.path.exists(cli_config_path):
     try:
@@ -159,7 +176,7 @@ if os.path.exists(cli_config_path):
             cli_config = json.load(f)
         cli_mcp = cli_config.get("mcpServers", {})
         for name in ["github", "exa-web-search"]:
-            if name in cli_mcp:
+            if name in cli_mcp and cli_mcp[name].get("type") != "http":
                 api_key_servers[name] = cli_mcp[name]
     except Exception:
         pass
@@ -299,4 +316,8 @@ echo ""
 echo "  Token economics:"
 echo "    MCP servers: zero tokens until invoked"
 echo "    Skills (tier=$TIER): see file size above — cached after first turn"
+echo ""
+echo "  Note: skillgraph (78 bioinformatics skills) is an HTTP-type server."
+echo "  Claude Desktop only supports stdio-based servers in its config."
+echo "  Use skillgraph in Claude Code CLI (already configured in ~/.claude.json)."
 echo ""
