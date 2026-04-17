@@ -10,10 +10,19 @@
 #   Linux:   ~/.config/Claude/claude_desktop_config.json
 #   Windows: %APPDATA%\Claude\claude_desktop_config.json  (run via Git Bash/WSL)
 #
+# Skills approach:
+#   Claude Desktop reads from ~/.claude/skills/ (same directory as Claude Code CLI).
+#   The recommended method is --link-skills, which symlinks skills already installed
+#   by safe-install.sh. No manual upload needed — skills appear as /command in chat.
+#   The Customize → Skills panel has a known bug (github #39994) where it doesn't
+#   show local skills, but they work via / slash commands regardless.
+#
 # Usage:
-#   ./scripts/setup-claude-desktop.sh                    # Full setup (MCP + skills)
+#   ./scripts/setup-claude-desktop.sh                    # Full setup (MCP + link skills)
 #   ./scripts/setup-claude-desktop.sh --mcp-only         # MCP servers only
-#   ./scripts/setup-claude-desktop.sh --skills-only      # Build skills file only
+#   ./scripts/setup-claude-desktop.sh --skills-only      # Link skills only (no MCP)
+#   ./scripts/setup-claude-desktop.sh --link-skills       # Symlink from ~/.claude/skills/ (default)
+#   ./scripts/setup-claude-desktop.sh --package-skills   # Build .skill files for manual upload
 #   ./scripts/setup-claude-desktop.sh --tier essential    # Minimal skills (~6K tokens)
 #   ./scripts/setup-claude-desktop.sh --tier standard     # Agents + top commands (~54K tokens)
 #   ./scripts/setup-claude-desktop.sh --tier full         # All universal skills (~89K tokens, default)
@@ -36,18 +45,24 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 FORCE=false
 MCP_ONLY=false
 SKILLS_ONLY=false
+PACKAGE_SKILLS=false
 TIER="full"
 CLEAN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --force)       FORCE=true; shift ;;
-        --mcp-only)    MCP_ONLY=true; shift ;;
-        --skills-only) SKILLS_ONLY=true; shift ;;
-        --tier)        TIER="$2"; shift 2 ;;
-        --clean)       CLEAN=true; shift ;;
+        --force)          FORCE=true; shift ;;
+        --mcp-only)       MCP_ONLY=true; shift ;;
+        --skills-only)    SKILLS_ONLY=true; shift ;;
+        --package-skills)  PACKAGE_SKILLS=true; shift ;;
+        --tier)           TIER="$2"; shift 2 ;;
+        --clean)          CLEAN=true; shift ;;
         --help|-h)
-            echo "Usage: setup-claude-desktop.sh [--mcp-only] [--skills-only] [--tier essential|standard|full] [--force] [--clean]"
+            echo "Usage: setup-claude-desktop.sh [--mcp-only] [--skills-only] [--package-skills]"
+            echo "       [--tier essential|standard|full] [--force] [--clean]"
+            echo ""
+            echo "  --package-skills  Build .skill files for manual upload (default: symlink)"
+            echo "  Without --package-skills, skills are symlinked from ~/.claude/skills/ (recommended)"
             exit 0
             ;;
         *) shift ;;
@@ -278,7 +293,36 @@ PYEOF
 }
 
 # =============================================================================
-# Part 2: Build curated skills file
+# Part 2: Skills (default: symlink, optional: package .skill files)
+# =============================================================================
+link_skills() {
+    # Claude Desktop reads from the same ~/.claude/skills/ directory as Claude Code CLI.
+    # safe-install.sh already populates this directory with all skills in <name>/SKILL.md format.
+    # Symlinks are not needed — both apps share the same path.
+    # This function verifies the skills are present and reports count.
+
+    local skills_dir="$HOME/.claude/skills"
+
+    if [ ! -d "$skills_dir" ]; then
+        warn "~/.claude/skills/ not found — run safe-install.sh first"
+        return 1
+    fi
+
+    local count=$(find "$skills_dir" -mindepth 1 -maxdepth 1 -type d ! -name 'learned' 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$count" -eq 0 ]; then
+        warn "No skills found in ~/.claude/skills/ — run safe-install.sh first"
+        return 1
+    fi
+
+    success "Skills: $count available in ~/.claude/skills/ (shared with Claude Desktop)"
+    log "Skills are available via / slash commands in Claude Desktop"
+    log "Note: Customize → Skills panel may not show local skills (known bug #39994)"
+    log "     but they work correctly via / command invocation"
+}
+
+# =============================================================================
+# Part 2b: Package skills as .skill files (for manual upload fallback)
 # =============================================================================
 build_skills() {
     log "Building curated skills (tier: $TIER)..."
@@ -298,10 +342,17 @@ if ! $SKILLS_ONLY; then
 fi
 
 if ! $MCP_ONLY; then
-    echo ""
-    log "Building curated skills for Desktop Project..."
-    echo ""
-    build_skills
+    if $PACKAGE_SKILLS; then
+        echo ""
+        log "Packaging .skill files for manual upload..."
+        echo ""
+        build_skills
+    else
+        echo ""
+        log "Linking skills from ~/.claude/skills/..."
+        echo ""
+        link_skills
+    fi
 fi
 
 echo ""
@@ -312,14 +363,20 @@ echo ""
 echo "  Next steps:"
 echo "    1. Restart Claude Desktop app"
 echo "    2. MCP servers will appear in Claude Desktop settings"
-echo "    3. To add skills: create a Project in Claude Desktop,"
-echo "       then paste the contents of:"
-echo "       $REPO_DIR/configs/claude-desktop-project-instructions.md"
-echo "       as the Project's custom instructions."
+echo "    3. Skills are available via / slash commands (shared with CLI)"
 echo ""
+if $PACKAGE_SKILLS; then
+echo "  Manual skill upload (only needed if / commands don't work):"
+echo "    1. Open Claude Desktop → Customize → Skills"
+echo "    2. Click '+' → 'Upload a skill'"
+echo "    3. Select files from: $REPO_DIR/configs/desktop-skills"
+echo ""
+echo "  Or select all at once: open \"$REPO_DIR/configs/desktop-skills\""
+echo ""
+fi
 echo "  Token economics:"
 echo "    MCP servers: zero tokens until invoked"
-echo "    Skills (tier=$TIER): see file size above — cached after first turn"
+echo "    Skills: loaded from ~/.claude/skills/ — cached after first turn"
 echo ""
 echo "  Note: skillgraph (78 bioinformatics skills) is an HTTP-type server."
 echo "  Claude Desktop only supports stdio-based servers in its config."
