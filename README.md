@@ -4,6 +4,8 @@
 
 One-command setup for all your Ollama agent harnesses: proper MCP servers, web tools, and harness-specific configs, all portable and reproducible.
 
+**317 on-disk + 78 via MCP = 395 skills** — see [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for a full categorized listing.
+
 ---
 
 ## Built on Everything Claude Code (ECC)
