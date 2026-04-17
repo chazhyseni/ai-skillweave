@@ -72,6 +72,7 @@ section() { echo ""; echo -e "${CYAN}══════════════�
 OLLAMA_MODEL="glm-5.1:cloud"
 SKIP_SKILLS=false
 WITH_SCIENCE=true
+WITH_CURATED=true
 ONLY_TARGET=""
 
 while [[ $# -gt 0 ]]; do
@@ -80,6 +81,8 @@ while [[ $# -gt 0 ]]; do
         --skip-skills)      SKIP_SKILLS=true; shift ;;
         --with-science)     WITH_SCIENCE=true; shift ;;
         --without-science)  WITH_SCIENCE=false; shift ;;
+        --with-curated)     WITH_CURATED=true; shift ;;
+        --without-curated)  WITH_CURATED=false; shift ;;
         --only)             ONLY_TARGET="$2"; shift 2 ;;
         --uninstall)
             "$REPO_DIR/safe-install.sh" --uninstall
@@ -172,6 +175,7 @@ if ! $SKIP_SKILLS && should_run "skills"; then
     safe_exit=0
     SAFE_ARGS=""
     $WITH_SCIENCE && SAFE_ARGS="$SAFE_ARGS --with-science"
+    $WITH_CURATED && SAFE_ARGS="$SAFE_ARGS --with-curated"
     bash "$REPO_DIR/safe-install.sh" $SAFE_ARGS || safe_exit=$?
     if [ "$safe_exit" -eq 0 ]; then
         success "ECC skills + shell wrappers installed (run: source $SHELL_RC to activate)"

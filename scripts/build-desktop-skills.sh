@@ -35,6 +35,7 @@ LEARNED_DIR="$HOME/.claude/skills/learned"
 AGENTS_DIR="$HOME/.claude-everything-claude-code/agents"
 COMMANDS_DIR="$HOME/.claude-everything-claude-code/commands"
 SCIENCE_DIR="$HOME/.claude-scientific-skills/scientific-skills"
+ECC_SKILLS_DIR="$HOME/.claude-everything-claude-code/skills"
 
 TIER="full"
 CLEAN=false
@@ -64,43 +65,13 @@ log "Output: $OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 # =============================================================================
-# Skill lists
-# =============================================================================
-UNIVERSAL_AGENTS=(
-    performance-optimizer code-reviewer typescript-reviewer planner
-    a11y-architect architect chief-of-staff security-reviewer
-    database-reviewer e2e-runner build-error-resolver docs-lookup
-    python-reviewer doc-updater tdd-guide refactor-cleaner
-    seo-specialist code-explorer code-architect conversation-analyzer
-    code-simplifier comment-analyzer silent-failure-hunter
-    pr-test-analyzer harness-optimizer loop-operator type-design-analyzer
-)
-
-TOP_COMMANDS=(
-    code-review tdd e2e build-fix feature-dev plan checkpoint
-    review-pr refactor-clean test-coverage docs eval verify
-    quality-gate context-budget model-route update-docs python-review
-    prp-prd prp-plan prp-implement prp-pr prp-commit
-)
-
-ALL_UNIVERSAL_COMMANDS=(
-    code-review tdd e2e build-fix feature-dev plan checkpoint review-pr
-    refactor-clean test-coverage docs eval verify quality-gate context-budget
-    model-route update-docs python-review prp-prd prp-plan prp-implement
-    prp-pr prp-commit sessions save-session resume-session multi-execute
-    multi-plan multi-workflow multi-frontend multi-backend santa-loop aside
-    skill-create evolve skill-health orchestrate learn-eval pm2 jira
-    instinct-import instinct-export instinct-status learn setup-pm promote
-    hookify hookify-help hookify-configure hookify-list update-codemaps
-    harness-audit loop-start loop-status projects devfleet prune
-    prompt-optimize rules-distill agent-sort claw
-)
-
-# =============================================================================
-# Collect skill list
+# Collect skill list (dynamic discovery — no hardcoded arrays)
 # =============================================================================
 SKILL_LIST=()
+SEEN_FILE=$(mktemp)
+trap "rm -f $SEEN_FILE" EXIT
 
+# Priority 0: Learned skills (personal, always included)
 if [ -d "$LEARNED_DIR" ]; then
     for f in "$LEARNED_DIR"/*.md; do
         [ -f "$f" ] || continue
@@ -109,32 +80,57 @@ if [ -d "$LEARNED_DIR" ]; then
     done
 fi
 
+# Priority 1: ECC agents (discovered dynamically)
 if [ "$TIER" = "standard" ] || [ "$TIER" = "full" ]; then
-    for name in "${UNIVERSAL_AGENTS[@]}"; do
-        f="$AGENTS_DIR/$name.md"
-        [ -f "$f" ] && SKILL_LIST+=("agent-$name|$f")
-    done
+    if [ -d "$AGENTS_DIR" ]; then
+        for f in "$AGENTS_DIR"/*.md; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" .md)
+            echo "agent-$name" >> "$SEEN_FILE"
+            SKILL_LIST+=("agent-$name|$f")
+        done
+    fi
 fi
 
+# Priority 2: ECC commands
 if [ "$TIER" = "standard" ]; then
+    # Standard tier: top commands only (curated list)
+    TOP_COMMANDS=(
+        code-review tdd e2e build-fix feature-dev plan checkpoint
+        review-pr refactor-clean test-coverage docs eval verify
+        quality-gate context-budget model-route update-docs python-review
+        prp-prd prp-plan prp-implement prp-pr prp-commit
+    )
     for name in "${TOP_COMMANDS[@]}"; do
         f="$COMMANDS_DIR/$name.md"
         [ -f "$f" ] && SKILL_LIST+=("cmd-$name|$f")
     done
 elif [ "$TIER" = "full" ]; then
-    SEEN_FILE=$(mktemp)
-    trap "rm -f $SEEN_FILE" EXIT
-    for name in "${ALL_UNIVERSAL_COMMANDS[@]}"; do
-        if ! grep -qx "$name" "$SEEN_FILE" 2>/dev/null; then
-            echo "$name" >> "$SEEN_FILE"
-            f="$COMMANDS_DIR/$name.md"
-            [ -f "$f" ] && SKILL_LIST+=("cmd-$name|$f")
-        fi
-    done
-    rm -f "$SEEN_FILE"
+    # Full tier: all commands discovered dynamically
+    if [ -d "$COMMANDS_DIR" ]; then
+        for f in "$COMMANDS_DIR"/*.md; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" .md)
+            ! grep -qx "cmd-$name" "$SEEN_FILE" 2>/dev/null || continue
+            echo "cmd-$name" >> "$SEEN_FILE"
+            SKILL_LIST+=("cmd-$name|$f")
+        done
+    fi
 fi
 
-# K-Dense Scientific Agent Skills (always included in all tiers)
+# Priority 3: ECC skills (SKILL.md in subdirectories)
+if [ -d "$ECC_SKILLS_DIR" ]; then
+    ECC_COUNT=0
+    for dir in "$ECC_SKILLS_DIR"/*/; do
+        [ -f "$dir/SKILL.md" ] || continue
+        name=$(basename "$dir")
+        SKILL_LIST+=("ecc-$name|$dir/SKILL.md")
+        ECC_COUNT=$((ECC_COUNT + 1))
+    done
+    log "Added $ECC_COUNT ECC skills"
+fi
+
+# Priority 4: K-Dense Scientific Agent Skills (always included in all tiers)
 if [ -d "$SCIENCE_DIR" ]; then
     SCIENCE_COUNT=0
     for dir in "$SCIENCE_DIR"/*/; do

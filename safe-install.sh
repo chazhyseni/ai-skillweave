@@ -179,9 +179,18 @@ install_curated_skills() {
     cd /tmp
     if git clone --depth 1 https://github.com/abubakarsiddik31/claude-skills-collection.git community-temp 2>/dev/null; then
         mv community-temp/* "$CURATED_DIR/community-curated/" 2>/dev/null || true
+        # Some repos store skills in a skills/ subdirectory
+        if [ -d "community-temp/skills" ]; then
+            cp -r community-temp/skills/* "$CURATED_DIR/community-curated/" 2>/dev/null || true
+        fi
         rm -rf community-temp
-        COMMUNITY_COUNT=$(find "$CURATED_DIR/community-curated" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-        success "Community curated skills: $COMMUNITY_COUNT skills"
+        # Only count actual skill .md files (skip README, contributing, etc.)
+        COMMUNITY_COUNT=$(find "$CURATED_DIR/community-curated" -name '*.md' ! -name 'README.md' ! -name 'contributing.md' -type f 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$COMMUNITY_COUNT" -gt 0 ]; then
+            success "Community curated skills: $COMMUNITY_COUNT skills"
+        else
+            log "Community curated: catalog-only (no skill files to install)"
+        fi
     else
         warn "Failed to fetch community skills (network issue?)"
     fi
@@ -282,7 +291,7 @@ PREAMBLE
         for skill in "$CLAUDE_DIR/skills/learned"/*.md; do
             if [ -f "$skill" ]; then
                 echo "" >> "$COMBINED_FILE"
-                sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+                awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$skill" >> "$COMBINED_FILE"
             fi
         done
     fi
@@ -293,7 +302,7 @@ PREAMBLE
         log "Merging Anthropic official skills (priority 1)..."
         find "$CURATED_DIR/anthropic-official" -name "*.md" -type f 2>/dev/null | while read -r skill; do
             echo "" >> "$COMBINED_FILE"
-            sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+            awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$skill" >> "$COMBINED_FILE"
         done
     fi
 
@@ -303,7 +312,7 @@ PREAMBLE
         # Filter to most relevant skills (avoid duplicates, focus on core patterns)
         find "$CURATED_DIR/openai-codex" -name "*.md" -type f 2>/dev/null | head -100 | while read -r skill; do
             echo "" >> "$COMBINED_FILE"
-            sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+            awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$skill" >> "$COMBINED_FILE"
         done
     fi
 
@@ -312,7 +321,7 @@ PREAMBLE
         log "Merging ECC skills (priority 3)..."
         find "$ECC_DIR/skills" -name "*.md" -type f ! -path "*/learned/*" 2>/dev/null | while read -r skill; do
             echo "" >> "$COMBINED_FILE"
-            sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+            awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$skill" >> "$COMBINED_FILE"
         done
     fi
 
@@ -321,7 +330,7 @@ PREAMBLE
         log "Merging community curated skills (priority 4, top 50)..."
         find "$CURATED_DIR/community-curated" -name "*.md" -type f 2>/dev/null | head -50 | while read -r skill; do
             echo "" >> "$COMBINED_FILE"
-            sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+            awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$skill" >> "$COMBINED_FILE"
         done
     fi
 
@@ -330,7 +339,7 @@ PREAMBLE
         log "Merging K-Dense scientific skills (priority 5)..."
         find "$SCIENCE_DIR/scientific-skills" -name "SKILL.md" -type f 2>/dev/null | while read -r skill; do
             echo "" >> "$COMBINED_FILE"
-            sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+            awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$skill" >> "$COMBINED_FILE"
         done
     fi
 

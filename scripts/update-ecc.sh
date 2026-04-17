@@ -125,7 +125,8 @@ PREAMBLE
 
 _add_skill_file() {
     echo "" >> "$COMBINED_FILE"
-    sed '1,/^---$/d' "$1" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+    # Strip YAML frontmatter portably (BSD sed destroys content with double-sed pattern)
+    awk 'BEGIN{f=0} /^---$/{f++; next} f>=2' "$1" >> "$COMBINED_FILE"
 }
 
 # Priority 0: Learned skills (always first — your personal skills)
