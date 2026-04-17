@@ -209,9 +209,12 @@ for name, cfg in {**servers, **api_key_servers}.items():
         if not cfg["env"]:
             del cfg["env"]
 
-    # Fix malformed entries (e.g. github with command="github")
+    # Skip HTTP-type servers (no command to resolve)
     cmd = cfg.get("command", "")
-    if cmd not in ("npx", "node") and cmd not in (npx_abs, node_abs):
+    if cfg.get("type") == "http":
+        pass
+    # Fix malformed entries (e.g. github with command="github")
+    elif cmd not in ("npx", "node") and cmd not in (npx_abs, node_abs):
         # Likely a malformed CLI copy — fix to npx
         cfg["command"] = npx_abs
         cfg["args"] = [a for a in cfg.get("args", []) if a != "npx"]
