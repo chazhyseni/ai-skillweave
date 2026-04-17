@@ -2,6 +2,20 @@
 # desktop-batch-import.sh — Batch import .skill files into Claude Desktop
 # Bypasses the 15-at-a-time UI limit by writing directly to Desktop's storage
 #
+# How it works:
+#   Writes .skill files to the skills-plugin directory that the Customize panel
+#   reads from. Claude Desktop MUST be closed before running this script, as the
+#   app regenerates manifest.json on startup and will discard our changes if it
+#   was running during the import.
+#
+# IMPORTANT: The Customize → Capabilities panel uses IndexedDB internally, but
+#   the skills-plugin directory IS read for agent-mode skill discovery. Skills
+#   imported here will appear in the Customize panel after restart, and are also
+#   available via / slash commands in agent-mode sessions.
+#
+# For / slash commands ONLY (without Customize panel visibility), skills in
+#   ~/.claude/skills/ (set up by safe-install.sh) are sufficient.
+#
 # Usage:
 #   ./scripts/desktop-batch-import.sh                    # Import all skills
 #   ./scripts/desktop-batch-import.sh --dry-run          # Show what would be imported
@@ -9,7 +23,7 @@
 #   ./scripts/desktop-batch-import.sh --clean            # Remove all custom skills first
 #
 # Prerequisites: Claude Desktop must be CLOSED before running this script.
-# After import: restart Claude Desktop, skills appear in Customize → Skills.
+# After import: restart Claude Desktop, skills appear in Customize → Capabilities.
 
 set -euo pipefail
 

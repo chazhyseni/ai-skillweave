@@ -11,11 +11,11 @@
 #   Windows: %APPDATA%\Claude\claude_desktop_config.json  (run via Git Bash/WSL)
 #
 # Skills approach:
-#   Claude Desktop reads from ~/.claude/skills/ (same directory as Claude Code CLI).
-#   The recommended method is --link-skills, which symlinks skills already installed
-#   by safe-install.sh. No manual upload needed — skills appear as /command in chat.
-#   The Customize → Skills panel has a known bug (github #39994) where it doesn't
-#   show local skills, but they work via / slash commands regardless.
+#   Claude Desktop discovers skills from ~/.claude/skills/ during agent-mode sessions
+#   (same directory as Claude Code CLI). safe-install.sh already populates this.
+#   The Customize → Capabilities panel uses IndexedDB (not the filesystem), so
+#   local skills won't appear there. Use desktop-batch-import.sh to inject skills
+#   into the Customize panel, or use / slash commands in agent-mode sessions.
 #
 # Usage:
 #   ./scripts/setup-claude-desktop.sh                    # Full setup (MCP + link skills)
@@ -296,10 +296,13 @@ PYEOF
 # Part 2: Skills (default: symlink, optional: package .skill files)
 # =============================================================================
 link_skills() {
-    # Claude Desktop reads from the same ~/.claude/skills/ directory as Claude Code CLI.
-    # safe-install.sh already populates this directory with all skills in <name>/SKILL.md format.
-    # Symlinks are not needed — both apps share the same path.
-    # This function verifies the skills are present and reports count.
+    # How Claude Desktop discovers skills (reverse-engineered from app.asar):
+    #   _discoverSkills() reads from this.skillDir, which is join(agentDir, ".claude", "skills")
+    #   where agentDir = home directory. So it reads ~/.claude/skills/ directories
+    #   containing SKILL.md files with YAML frontmatter (name + description required).
+    #   This discovery ONLY runs during agent-mode sessions (agentic coding tool calls).
+    #   The Customize → Capabilities panel uses IndexedDB, NOT the filesystem —
+    #   writing to skills-plugin/ doesn't survive app restarts.
 
     local skills_dir="$HOME/.claude/skills"
 
@@ -315,10 +318,11 @@ link_skills() {
         return 1
     fi
 
-    success "Skills: $count available in ~/.claude/skills/ (shared with Claude Desktop)"
-    log "Skills are available via / slash commands in Claude Desktop"
-    log "Note: Customize → Skills panel may not show local skills (known bug #39994)"
-    log "     but they work correctly via / command invocation"
+    success "Skills: $count available in ~/.claude/skills/"
+    log "Skills work via / slash commands in agent-mode sessions"
+    log "Customize → Capabilities panel does NOT list local skills (it uses IndexedDB)"
+    log "To bulk-import into the Customize panel, close Desktop and run:"
+    log "  $REPO_DIR/scripts/desktop-batch-import.sh"
 }
 
 # =============================================================================
@@ -379,7 +383,8 @@ echo ""
 fi
 echo "  Token economics:"
 echo "    MCP servers: zero tokens until invoked"
-echo "    Skills: loaded from ~/.claude/skills/ — cached after first turn"
+echo "    Skills: discovered from ~/.claude/skills/ during agent-mode sessions"
+echo "    Customize panel: uses IndexedDB (not filesystem) -- use batch-import.sh"
 echo ""
 echo "  Note: skillgraph (78 bioinformatics skills) is an HTTP-type server."
 echo "  Claude Desktop only supports stdio-based servers in its config."
