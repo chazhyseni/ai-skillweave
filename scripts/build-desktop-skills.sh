@@ -18,6 +18,8 @@
 #   scripts/build-desktop-skills.sh                   # Full tier, output to configs/desktop-skills/
 #   scripts/build-desktop-skills.sh --tier essential
 #   scripts/build-desktop-skills.sh --tier standard
+#   scripts/build-desktop-skills.sh --clean           # Remove stale .skill files before building
+#   scripts/build-desktop-skills.sh --clean --tier full  # Clean rebuild
 # =============================================================================
 set -e
 
@@ -35,13 +37,27 @@ COMMANDS_DIR="$HOME/.claude-everything-claude-code/commands"
 SCIENCE_DIR="$HOME/.claude-scientific-skills/scientific-skills"
 
 TIER="full"
+CLEAN=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tier) TIER="$2"; shift 2 ;;
         --output) OUTPUT_DIR="$2"; shift 2 ;;
+        --clean) CLEAN=true; shift ;;
         *) shift ;;
     esac
 done
+
+# Clean: remove stale .skill files before rebuilding
+if $CLEAN; then
+    EXISTING=$(ls "$OUTPUT_DIR"/*.skill 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$EXISTING" -gt 0 ]; then
+        log "Cleaning $EXISTING stale .skill files from $OUTPUT_DIR"
+        rm -f "$OUTPUT_DIR"/*.skill
+        success "Cleaned $EXISTING .skill files"
+    else
+        log "No stale .skill files to clean"
+    fi
+fi
 
 log "Tier: $TIER"
 log "Output: $OUTPUT_DIR"
