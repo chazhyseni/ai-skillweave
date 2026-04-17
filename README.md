@@ -33,6 +33,31 @@ If you find these scientific skills useful, go star ⭐ [K-Dense-AI/scientific-a
 
 ---
 
+## Bioinformatics Agent Skills — Variome Analytics
+
+> **78 bioinformatics pipeline skills with a knowledge graph from [variomeanalytics/bioinformatics-agent-skills](https://github.com/variomeanalytics/bioinformatics-agent-skills)** — covering variant analysis, drug discovery, single-cell RNA-seq, genome-wide association studies, and 15+ database query skills (ClinVar, gnomAD, COSMIC, Ensembl, UniProt, and more).
+
+Unlike ECC and K-Dense which ship on-disk `SKILL.md` files, these skills are served dynamically via an **MCP server** (`skillgraph`) that provides:
+
+- `get_skill` — Full skill documentation for any of the 78 skills
+- `list_skills` — List all skills, optionally filtered by domain
+- `search_skills` — Keyword search across skill IDs, triggers, and tool names
+- `get_transitions` — Upstream/downstream skill edges with paper counts and data types
+- `find_path` — Shortest pipeline path between two skills
+- `get_graph_stats` — Graph statistics (skill count, edges, domain breakdown)
+
+This knowledge graph approach means you can ask "what pipeline takes me from FASTQ to DEGs?" and get a real answer with evidence — something on-disk skill files alone can't provide.
+
+**Installation:**
+
+```bash
+# Add the SkillGraph MCP server (works out of the box after install.sh)
+# It's already included in configs/claude-mcp-servers.json
+./scripts/setup-mcp.sh --force   # re-apply MCP config to add skillgraph
+```
+
+---
+
 ## Quick Start (New Machine)
 
 ```bash
@@ -60,7 +85,7 @@ ollama launch codex       # Codex via Ollama backend
 
 | Component | What it configures |
 |-----------|-------------------|
-| **Claude Code MCP** | Adds 7 servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer, codesight |
+| **Claude Code MCP** | Adds 8 servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer, codesight, skillgraph |
 | **OpenClaw** | Enables web tools + Ollama plugin in `~/.openclaw/openclaw.json` |
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
 | **Codex** | Configures `ollama-launch` provider + `danger-full-access` sandbox in `~/.codex/config.toml` |
@@ -279,6 +304,7 @@ sudo dnf install python3
 | `google-docs-editor` | Read/write Google Docs (local server, pre-built) |
 | `token-optimizer` | 95%+ context reduction via deduplication — saves Opus tokens |
 | `codesight` | Maps codebase routes, schema, components, dependencies — AI context for any project |
+| `skillgraph` | 78 bioinformatics pipeline skills + knowledge graph — variant analysis, drug discovery, single-cell, 15+ databases |
 
 **No tokens or API keys needed for any of the above.** `install.sh` applies them automatically on a new machine.
 
@@ -326,6 +352,7 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 |--------|--------|-------|
 | ECC core | 183 SKILL.md dirs | From `affaan-m/everything-claude-code` |
 | K-Dense scientific | 134 SKILL.md dirs | From `K-Dense-AI/scientific-agent-skills` |
+| SkillGraph bioinformatics | 78 pipeline skills | From `variomeanalytics/bioinformatics-agent-skills` via MCP server |
 | Anthropic official | 17 SKILL.md dirs (64 total .md) | From Anthropic's official skills library |
 | OpenAI Codex curated | 44 SKILL.md dirs (469 total .md) | From OpenAI's Codex skills collection |
 | Personal learned | varies | Your own patterns extracted from sessions |
@@ -334,7 +361,7 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 
 | Harness | Skills | How they load |
 |---------|--------|--------------|
-| `claude` / `ollama launch claude` | **317 native** + ~22K line cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + full cache via `--append-system-prompt-file` |
+| `claude` / `ollama launch claude` | **317 native** + 78 via MCP + ~22K line cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + full cache via `--append-system-prompt-file` + SkillGraph MCP |
 | `ollama launch openclaw` | **317 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
 | `ollama launch pi` | **317 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
 | `ollama launch codex` | **317 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
@@ -382,7 +409,7 @@ To update K-Dense scientific skills, re-run with `--with-science`:
 
 ## Token Efficiency — Skills Injection + Prompt Caching
 
-All 317+ skills (~744KB / ~186K tokens, ECC + K-Dense) are injected into every `claude` session via `--append-system-prompt-file`. With `--with-curated` the total grows to ~800+ skills. This sounds expensive, but Claude Code's **prompt caching** makes it economical:
+All 317 skills (~744KB / ~186K tokens, ECC + K-Dense) are injected into every `claude` session via `--append-system-prompt-file`. With `--with-curated` the total grows to ~800+ skills. This sounds expensive, but Claude Code's **prompt caching** makes it economical:
 
 ### How caching works
 
@@ -535,7 +562,7 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 ### What gets configured
 
-**MCP servers** (7 from template + any API-key servers found in your CLI config — zero token cost until invoked):
+**MCP servers** (8 from template + any API-key servers found in your CLI config — zero token cost until invoked):
 
 | Server | Purpose |
 |--------|---------|
@@ -546,6 +573,7 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 | `token-optimizer` | 95%+ context reduction via deduplication |
 | `playwright` | Browser automation |
 | `google-docs-editor` | Read/write Google Docs |
+| `skillgraph` | 78 bioinformatics pipeline skills + knowledge graph |
 | `github` | GitHub API (copied from CLI config if configured) |
 | `exa-web-search` | Neural web search (copied from CLI config if configured) |
 
@@ -594,7 +622,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 |---------|----------------|-------------------|
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| MCP servers | 7 auto + manual API-key servers | 7 auto + API-key servers copied from CLI |
+| MCP servers | 8 auto + manual API-key servers | 7 auto + API-key servers copied from CLI |
 | Skills injection | ~317 files via `--append-system-prompt-file` | 88 + personal + K-Dense via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
@@ -606,4 +634,5 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 - `docs/TROUBLESHOOTING.md` — Common problems and solutions
 - `~/.claude-everything-claude-code/` — Full ECC skills repository
 - `~/.claude-scientific-skills/` — K-Dense scientific agent skills repository
+- [variomeanalytics/bioinformatics-agent-skills](https://github.com/variomeanalytics/bioinformatics-agent-skills) — Bioinformatics pipeline skills + knowledge graph (MCP)
 - `~/.claude-everything-claude-code/mcp-configs/mcp-servers.json` — Complete MCP server reference

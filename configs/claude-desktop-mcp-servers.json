@@ -45,6 +45,10 @@
       "env": {
         "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
       }
+    },
+    "skillgraph": {
+      "type": "http",
+      "url": "https://skillgraph.pipette.bio/mcp"
     }
   }
 }
