@@ -12,6 +12,7 @@
 #
 # Usage:
 #   ./install.sh                           # Full setup (all harnesses)
+#   ./install.sh --with-science            # Full setup + K-Dense scientific skills
 #   ./install.sh --model llama3.2:3b       # Use a specific Ollama model
 #   ./install.sh --skip-skills             # Skip ECC skills installation
 #   ./install.sh --only claude             # Only configure claude
@@ -68,15 +69,17 @@ section() { echo ""; echo -e "${CYAN}══════════════�
 # =============================================================================
 # Parse arguments
 # =============================================================================
-OLLAMA_MODEL="qwen3.5:397b-cloud"
+OLLAMA_MODEL="glm-5.1:cloud"
 SKIP_SKILLS=false
+WITH_SCIENCE=false
 ONLY_TARGET=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --model)       OLLAMA_MODEL="$2"; shift 2 ;;
-        --skip-skills) SKIP_SKILLS=true; shift ;;
-        --only)        ONLY_TARGET="$2"; shift 2 ;;
+        --model)          OLLAMA_MODEL="$2"; shift 2 ;;
+        --skip-skills)    SKIP_SKILLS=true; shift ;;
+        --with-science)   WITH_SCIENCE=true; shift ;;
+        --only)           ONLY_TARGET="$2"; shift 2 ;;
         --uninstall)
             "$REPO_DIR/safe-install.sh" --uninstall
             exit 0
@@ -163,7 +166,9 @@ if ! $SKIP_SKILLS && should_run "skills"; then
     # safe-install.sh may exit non-zero when 'source <rc>' fails in a non-interactive
     # subshell — this is expected and harmless. Capture exit code to report real failures.
     safe_exit=0
-    bash "$REPO_DIR/safe-install.sh" || safe_exit=$?
+    SAFE_ARGS=""
+    $WITH_SCIENCE && SAFE_ARGS="$SAFE_ARGS --with-science"
+    bash "$REPO_DIR/safe-install.sh" $SAFE_ARGS || safe_exit=$?
     if [ "$safe_exit" -eq 0 ]; then
         success "ECC skills + shell wrappers installed (run: source $SHELL_RC to activate)"
     else
