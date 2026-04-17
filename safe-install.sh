@@ -50,7 +50,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse arguments
 WITH_CURATED=false
 CURATED_ONLY=false
-WITH_SCIENCE=false
+WITH_SCIENCE=true
 
 for arg in "$@"; do
     case $arg in
@@ -65,6 +65,10 @@ for arg in "$@"; do
             ;;
         --with-science)
             WITH_SCIENCE=true
+            shift
+            ;;
+        --without-science)
+            WITH_SCIENCE=false
             shift
             ;;
         --uninstall)

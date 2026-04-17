@@ -37,6 +37,7 @@ FORCE=false
 MCP_ONLY=false
 SKILLS_ONLY=false
 TIER="full"
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -44,8 +45,9 @@ while [[ $# -gt 0 ]]; do
         --mcp-only)    MCP_ONLY=true; shift ;;
         --skills-only) SKILLS_ONLY=true; shift ;;
         --tier)        TIER="$2"; shift 2 ;;
+        --clean)       CLEAN=true; shift ;;
         --help|-h)
-            echo "Usage: setup-claude-desktop.sh [--mcp-only] [--skills-only] [--tier essential|standard|full] [--force]"
+            echo "Usage: setup-claude-desktop.sh [--mcp-only] [--skills-only] [--tier essential|standard|full] [--force] [--clean]"
             exit 0
             ;;
         *) shift ;;
@@ -280,7 +282,9 @@ PYEOF
 # =============================================================================
 build_skills() {
     log "Building curated skills (tier: $TIER)..."
-    bash "$REPO_DIR/scripts/build-desktop-skills.sh" --tier "$TIER"
+    CLEAN_FLAG=""
+    $CLEAN && CLEAN_FLAG="--clean"
+    bash "$REPO_DIR/scripts/build-desktop-skills.sh" --tier "$TIER" $CLEAN_FLAG
 }
 
 # =============================================================================
