@@ -562,7 +562,7 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 ### What gets configured
 
-**MCP servers** (8 from template + any API-key servers found in your CLI config — zero token cost until invoked):
+**MCP servers** (7 from template + any API-key servers found in your CLI config — zero token cost until invoked):
 
 | Server | Purpose |
 |--------|---------|
@@ -573,9 +573,10 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 | `token-optimizer` | 95%+ context reduction via deduplication |
 | `playwright` | Browser automation |
 | `google-docs-editor` | Read/write Google Docs |
-| `skillgraph` | 78 bioinformatics pipeline skills + knowledge graph |
 | `github` | GitHub API (copied from CLI config if configured) |
 | `exa-web-search` | Neural web search (copied from CLI config if configured) |
+
+> **Note:** `skillgraph` (78 bioinformatics skills) is an HTTP-type server. Claude Desktop's config file does not support remote/HTTP servers — add it via **Settings → Integrations** in the Desktop UI instead. It works natively in Claude Code CLI (`~/.claude.json`).
 
 **Curated skills** — built into `configs/claude-desktop-project-instructions.md`:
 
@@ -622,7 +623,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 |---------|----------------|-------------------|
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| MCP servers | 8 auto + manual API-key servers | 7 auto + API-key servers copied from CLI |
+| MCP servers | 8 auto + manual API-key servers | 7 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
 | Skills injection | ~317 files via `--append-system-prompt-file` | 88 + personal + K-Dense via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |

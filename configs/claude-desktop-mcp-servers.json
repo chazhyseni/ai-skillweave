@@ -46,9 +46,6 @@
         "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
       }
     },
-    "skillgraph": {
-      "type": "http",
-      "url": "https://skillgraph.pipette.bio/mcp"
-    }
-  }
+  },
+  "_remote_servers_note": "HTTP-type servers (e.g. skillgraph) are NOT supported in claude_desktop_config.json. Add them via Settings → Integrations in the Claude Desktop UI."
 }
