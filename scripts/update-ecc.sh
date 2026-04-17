@@ -17,6 +17,7 @@
 set -e
 
 ECC_DIR="$HOME/.claude-everything-claude-code"
+SCIENCE_DIR="$HOME/.claude-scientific-skills"
 SKILLS_CACHE_DIR="$HOME/.claude/skills-cache"
 COMBINED_FILE="$SKILLS_CACHE_DIR/combined-skills.txt"
 
@@ -188,6 +189,16 @@ else
     log "Community curated: catalog-only (no skill files installed)"
 fi
 
+# Priority 5: K-Dense Scientific Agent Skills (SKILL.md in subdirectories)
+SCIENCE_SKILLS_DIR="$SCIENCE_DIR/scientific-skills"
+if [ -d "$SCIENCE_SKILLS_DIR" ]; then
+    SKILL_COUNT=0
+    while IFS= read -r -d '' skill; do
+        _add_skill_file "$skill"; SKILL_COUNT=$((SKILL_COUNT + 1))
+    done < <(find "$SCIENCE_SKILLS_DIR" -name "SKILL.md" -type f -print0 2>/dev/null)
+    [ $SKILL_COUNT -gt 0 ] && success "K-Dense scientific skills: $SKILL_COUNT"
+fi
+
 CACHE_SIZE=$(wc -c < "$COMBINED_FILE" | tr -d ' ')
 success "Cache rebuilt: $CACHE_SIZE bytes → $COMBINED_FILE"
 
@@ -220,7 +231,7 @@ openclaw_ws = os.path.join(home, ".openclaw", "workspace", "skills")
 pi_skills   = os.path.join(home, ".pi", "agent", "skills")
 codex_skills= os.path.join(home, ".codex", "skills")
 
-ALLOWED_FIELDS = {"name", "description", "origin", "tools"}
+ALLOWED_FIELDS = {"name", "description", "origin", "tools", "license", "allowed-tools", "metadata", "compatibility"}
 
 def sanitize_skill_md(path):
     """Return sanitized SKILL.md content (strips extra fields, flattens block scalars).
@@ -293,8 +304,8 @@ def needs_sanitize(path):
     # Block scalar descriptions
     if re.search(r"^description:\s*[>|]", fm, re.MULTILINE):
         return True
-    # Extra top-level fields
-    fields = re.findall(r"^([a-z_]+):", fm, re.MULTILINE)
+    # Extra top-level fields (beyond what's allowed in target harness)
+    fields = re.findall(r"^([a-z_][a-z0-9_-]*):", fm, re.MULTILINE)
     if set(fields) - ALLOWED_FIELDS:
         return True
     # Indented lines that look like nested YAML mappings (e.g. "  author: evos")
@@ -308,8 +319,9 @@ def needs_sanitize(path):
 curated_dir = os.path.join(home, ".claude-curated-skills")
 anthropic_skills_dir = os.path.join(curated_dir, "anthropic-official", "skills")
 codex_curated_dir = os.path.join(curated_dir, "openai-codex", "skills")
+science_dir = os.path.join(home, ".claude-scientific-skills", "scientific-skills")
 
-# Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated
+# Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated + K-Dense
 def collect_skill_dirs(base_dir):
     """Return {skill_name: skill_dir_path} for all dirs containing SKILL.md (any depth)."""
     result = {}
@@ -326,11 +338,13 @@ def collect_skill_dirs(base_dir):
 ecc_skills = collect_skill_dirs(ecc_dir)
 anthropic_skills = collect_skill_dirs(anthropic_skills_dir)
 codex_curated_skills = collect_skill_dirs(codex_curated_dir)
+science_skills = collect_skill_dirs(science_dir)
 
 # Merge all sources (ECC has priority over curated on name conflicts)
 all_skills = {}
 all_skills.update(codex_curated_skills)   # lowest priority
-all_skills.update(anthropic_skills)       # medium priority
+all_skills.update(anthropic_skills)       # medium-low priority
+all_skills.update(science_skills)         # medium priority
 all_skills.update(ecc_skills)             # highest priority (ECC wins)
 
 stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}}
@@ -397,7 +411,7 @@ if os.path.isdir(os.path.join(home, ".codex")):
     stats["codex"]["total"] = len(os.listdir(codex_skills))
 
 total = len(all_skills)
-print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")

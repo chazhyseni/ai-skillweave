@@ -32,6 +32,7 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 LEARNED_DIR="$HOME/.claude/skills/learned"
 AGENTS_DIR="$HOME/.claude-everything-claude-code/agents"
 COMMANDS_DIR="$HOME/.claude-everything-claude-code/commands"
+SCIENCE_DIR="$HOME/.claude-scientific-skills/scientific-skills"
 
 TIER="full"
 while [[ $# -gt 0 ]]; do
@@ -115,6 +116,21 @@ elif [ "$TIER" = "full" ]; then
         fi
     done
     rm -f "$SEEN_FILE"
+fi
+
+# K-Dense Scientific Agent Skills (always included in all tiers)
+if [ -d "$SCIENCE_DIR" ]; then
+    SCIENCE_COUNT=0
+    for dir in "$SCIENCE_DIR"/*/; do
+        name=$(basename "$dir")
+        if [ -f "$dir/SKILL.md" ]; then
+            SKILL_LIST+=("science-$name|$dir/SKILL.md")
+            SCIENCE_COUNT=$((SCIENCE_COUNT + 1))
+        fi
+    done
+    log "Added $SCIENCE_COUNT K-Dense scientific skills"
+else
+    warn "K-Dense scientific skills not found — run: ./safe-install.sh --with-science"
 fi
 
 log "Collected ${#SKILL_LIST[@]} skills to package"

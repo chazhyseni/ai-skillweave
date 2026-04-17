@@ -16,6 +16,23 @@ If you find the skills useful, go star ⭐ [affaan-m/everything-claude-code](htt
 
 ---
 
+## Scientific Agent Skills — K-Dense
+
+> **134 scientific and research skills from [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills)** — covering bioinformatics, cheminformatics, drug discovery, clinical research, proteomics, medical imaging, ML/AI, materials science, physics, and 100+ scientific databases.
+
+These skills follow the open [Agent Skills](https://agentskills.io/) standard and work with Claude Code, Cursor, Codex, and Gemini CLI. `ai-skillweave` extends them to all supported harnesses, just like ECC skills.
+
+To install:
+
+```bash
+./safe-install.sh --with-science                    # ECC + K-Dense scientific skills
+./safe-install.sh --with-curated --with-science     # Full install: ECC + curated + scientific
+```
+
+If you find these scientific skills useful, go star ⭐ [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills).
+
+---
+
 ## Quick Start (New Machine)
 
 ```bash
@@ -308,6 +325,7 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 | Source | Skills | Notes |
 |--------|--------|-------|
 | ECC core | 183 SKILL.md dirs | From `affaan-m/everything-claude-code` |
+| K-Dense scientific | 134 SKILL.md dirs | From `K-Dense-AI/scientific-agent-skills` |
 | Anthropic official | 17 SKILL.md dirs (64 total .md) | From Anthropic's official skills library |
 | OpenAI Codex curated | 44 SKILL.md dirs (469 total .md) | From OpenAI's Codex skills collection |
 | Personal learned | varies | Your own patterns extracted from sessions |
@@ -316,10 +334,10 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 
 | Harness | Skills | How they load |
 |---------|--------|--------------|
-| `claude` / `ollama launch claude` | **183 native + ~6K line cache** | SKILL.md → `~/.claude/skills/` (native `/skills`) + full cache via `--append-system-prompt-file` |
-| `ollama launch openclaw` | **183 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
-| `ollama launch pi` | **183 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
-| `ollama launch codex` | **183 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
+| `claude` / `ollama launch claude` | **317 native** + ~22K line cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + full cache via `--append-system-prompt-file` |
+| `ollama launch openclaw` | **317 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
+| `ollama launch pi` | **317 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
+| `ollama launch codex` | **317 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
 
 Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
@@ -338,8 +356,10 @@ Learned skills live in `~/.claude/skills/learned/` and are automatically propaga
 ### Installing ECC
 
 ```bash
-./safe-install.sh                  # ECC only
-./safe-install.sh --with-curated   # ECC + Anthropic official + community skills
+./safe-install.sh                                    # ECC only
+./safe-install.sh --with-curated                     # ECC + Anthropic official + community skills
+./safe-install.sh --with-science                     # ECC + K-Dense scientific skills (134 skills)
+./safe-install.sh --with-curated --with-science      # Full install: all skill sources
 ```
 
 ### Keeping ECC Up to Date
@@ -347,27 +367,33 @@ Learned skills live in `~/.claude/skills/learned/` and are automatically propaga
 When ECC adds new skills upstream, pull and rebuild without a full re-install:
 
 ```bash
-scripts/update-ecc.sh           # Pull latest + rebuild cache + re-sync all harnesses
+scripts/update-ecc.sh           # Pull latest ECC + rebuild cache + re-sync all harnesses
 scripts/update-ecc.sh --check   # Just check if updates are available
 scripts/update-ecc.sh --force   # Force cache rebuild even if already up to date
+```
+
+To update K-Dense scientific skills, re-run with `--with-science`:
+
+```bash
+./safe-install.sh --with-science   # Re-clone K-Dense repo + rebuild cache + re-sync
 ```
 
 ---
 
 ## Token Efficiency — Skills Injection + Prompt Caching
 
-All 775 skills (~1.16MB / ~289K tokens) are injected into every `claude` session via `--append-system-prompt-file`. This sounds expensive, but Claude Code's **prompt caching** makes it economical:
+All 317+ skills (~744KB / ~186K tokens, ECC + K-Dense) are injected into every `claude` session via `--append-system-prompt-file`. With `--with-curated` the total grows to ~800+ skills. This sounds expensive, but Claude Code's **prompt caching** makes it economical:
 
 ### How caching works
 
 | Event | Cost at Opus pricing |
 |-------|---------------------|
-| Session 1 (cache miss) | ~$4.35 (289K × $15/MTok) |
-| Session 2+ same day (cache hit) | ~$0.43 (289K × $1.50/MTok cache read) |
+| Session 1 (cache miss) | ~$2.79 (186K × $15/MTok) |
+| Session 2+ same day (cache hit) | ~$0.28 (186K × $1.50/MTok cache read) |
 | Each conversation turn | Only new tokens in the exchange |
 
-**5 sessions/day with caching: $4.35 + 4 × $0.43 = $6.07**  
-Without caching it would be $4.35 × 5 = $21.75. With caching: **72% cheaper.**
+**5 sessions/day with caching: $2.79 + 4 × $0.28 = $3.91**
+Without caching it would be $2.79 × 5 = $13.95. With caching: **72% cheaper.**
 
 ### What's already enabled
 
@@ -569,7 +595,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 7 auto + manual API-key servers | 7 auto + API-key servers copied from CLI |
-| Skills injection | ~775 files via `--append-system-prompt-file` | 88 + personal via Project instructions |
+| Skills injection | ~317 files via `--append-system-prompt-file` | 88 + personal + K-Dense via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
@@ -579,4 +605,5 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 
 - `docs/TROUBLESHOOTING.md` — Common problems and solutions
 - `~/.claude-everything-claude-code/` — Full ECC skills repository
+- `~/.claude-scientific-skills/` — K-Dense scientific agent skills repository
 - `~/.claude-everything-claude-code/mcp-configs/mcp-servers.json` — Complete MCP server reference

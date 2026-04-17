@@ -12,6 +12,7 @@ set -e
 CLAUDE_DIR="$HOME/.claude"
 ECC_DIR="$HOME/.claude-everything-claude-code"
 CURATED_DIR="$HOME/.claude-curated-skills"
+SCIENCE_DIR="$HOME/.claude-scientific-skills"
 SKILLS_CACHE_DIR="$HOME/.claude/skills-cache"
 
 # Platform detection
@@ -49,6 +50,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Parse arguments
 WITH_CURATED=false
 CURATED_ONLY=false
+WITH_SCIENCE=false
 
 for arg in "$@"; do
     case $arg in
@@ -59,6 +61,10 @@ for arg in "$@"; do
         --curated-only)
             CURATED_ONLY=true
             WITH_CURATED=true
+            shift
+            ;;
+        --with-science)
+            WITH_SCIENCE=true
             shift
             ;;
         --uninstall)
@@ -72,6 +78,9 @@ echo "╔═══════════════════════�
 echo "║   SAFE Install - Everything Claude Code Skills          ║"
 if [ "$WITH_CURATED" = true ]; then
     echo "║   + Curated Skills (Anthropic Official + Community)      ║"
+fi
+if [ "$WITH_SCIENCE" = true ]; then
+    echo "║   + Scientific Skills (K-Dense Agent Skills)            ║"
 fi
 echo "║   Zero-Risk • Auto Shell Integration                     ║"
 echo "╚══════════════════════════════════════════════════════════╝"
@@ -192,7 +201,51 @@ install_curated_skills() {
 }
 
 # =============================================================================
-# Step 2b: Create combined skills loader (single file with ALL skills)
+# Step 2b: Install K-Dense Scientific Agent Skills
+# =============================================================================
+
+install_science_skills() {
+    if [ "$WITH_SCIENCE" = false ]; then
+        log "Skipping scientific skills (use --with-science to add)"
+        return 0
+    fi
+
+    log "Step 2b: Installing K-Dense Scientific Agent Skills..."
+
+    if [ -d "$SCIENCE_DIR" ]; then
+        warn "Existing scientific skills found: $SCIENCE_DIR"
+        if [ -t 0 ]; then
+            read -p "Overwrite? [y/N] " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                success "Keeping existing scientific skills"
+                return 0
+            else
+                rm -rf "$SCIENCE_DIR"
+            fi
+        else
+            success "Non-interactive mode — keeping existing scientific skills"
+            return 0
+        fi
+    fi
+
+    mkdir -p "$SCIENCE_DIR"
+    cd /tmp
+    if git clone --depth 1 https://github.com/K-Dense-AI/scientific-agent-skills.git science-temp 2>/dev/null; then
+        # Copy skill directories (each contains SKILL.md + optional references/scripts/assets)
+        mkdir -p "$SCIENCE_DIR/scientific-skills"
+        cp -r science-temp/scientific-skills/* "$SCIENCE_DIR/scientific-skills/" 2>/dev/null || true
+        SCIENCE_COUNT=$(find "$SCIENCE_DIR/scientific-skills" -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
+        rm -rf science-temp
+        success "K-Dense scientific skills installed: $SCIENCE_DIR ($SCIENCE_COUNT skills)"
+    else
+        error "Failed to fetch K-Dense scientific-agent-skills repository"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Step 3: Create combined skills loader (single file with ALL skills)
 # =============================================================================
 
 create_loader() {
@@ -263,6 +316,15 @@ PREAMBLE
     if [ -d "$CURATED_DIR/community-curated" ]; then
         log "Merging community curated skills (priority 4, top 50)..."
         find "$CURATED_DIR/community-curated" -name "*.md" -type f 2>/dev/null | head -50 | while read -r skill; do
+            echo "" >> "$COMBINED_FILE"
+            sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
+        done
+    fi
+
+    # Priority 5: K-Dense Scientific Agent Skills (SKILL.md in subdirectories)
+    if [ -d "$SCIENCE_DIR/scientific-skills" ]; then
+        log "Merging K-Dense scientific skills (priority 5)..."
+        find "$SCIENCE_DIR/scientific-skills" -name "SKILL.md" -type f 2>/dev/null | while read -r skill; do
             echo "" >> "$COMBINED_FILE"
             sed '1,/^---$/d' "$skill" | sed '1,/^---$/d' >> "$COMBINED_FILE"
         done
@@ -514,6 +576,79 @@ link_native_skills() {
     else
         warn "~/.pi/agent not found — install pi first"
     fi
+
+    # K-Dense Scientific Skills: install into Claude Code native skills dir
+    # These are directory-based skills (SKILL.md + references/ + scripts/ + assets/)
+    # Claude Code supports both flat .md files and directory-based skills
+    if [ -d "$SCIENCE_DIR/scientific-skills" ]; then
+        local science_count=0
+        for dir in "$SCIENCE_DIR/scientific-skills"/*/; do
+            skill_name=$(basename "$dir")
+            [ ! -f "$dir/SKILL.md" ] && continue
+            # Claude Code: flat .md file (SKILL.md content)
+            local dst="$claude_skills_dir/${skill_name}.md"
+            if [ ! -f "$dst" ]; then
+                cp "$dir/SKILL.md" "$dst"
+                science_count=$((science_count + 1))
+            fi
+        done
+        success "Claude Code: $science_count K-Dense scientific skills installed to ~/.claude/skills/"
+
+        # OpenClaw: real copies for K-Dense skills (sanitize YAML)
+        if [ -d "$HOME/.openclaw/workspace" ]; then
+            local oc_science_count=0
+            for dir in "$SCIENCE_DIR/scientific-skills"/*/; do
+                skill_name=$(basename "$dir")
+                [ ! -f "$dir/SKILL.md" ] && continue
+                dst="$ws_skills/$skill_name"
+                if [ ! -d "$dst" ]; then
+                    mkdir -p "$dst"
+                    # Copy SKILL.md (sanitize if needed)
+                    if grep -q '^description: *[>|]' "$dir/SKILL.md" 2>/dev/null || \
+                       grep -E '^[a-z_]+:' "$dir/SKILL.md" 2>/dev/null | grep -qvE '^(name|description|origin|tools|license|allowed-tools|metadata|compatibility):'; then
+                        # Needs sanitization — copy only SKILL.md with sanitized content
+                        python3 -c "
+import re, sys
+with open('$dir/SKILL.md') as f:
+    content = f.read()
+parts = content.split('---', 2)
+if len(parts) >= 3:
+    print('---' + parts[1] + '---' + parts[2])
+else:
+    print(content)
+" > "$dst/SKILL.md" 2>/dev/null || cp "$dir/SKILL.md" "$dst/SKILL.md"
+                    else
+                        cp "$dir/SKILL.md" "$dst/SKILL.md"
+                    fi
+                    # Copy references/ and scripts/ and assets/ if they exist
+                    cp -r "$dir/references" "$dst/" 2>/dev/null || true
+                    cp -r "$dir/scripts" "$dst/" 2>/dev/null || true
+                    cp -r "$dir/assets" "$dst/" 2>/dev/null || true
+                    oc_science_count=$((oc_science_count + 1))
+                fi
+            done
+            success "OpenClaw: $oc_science_count K-Dense scientific skills copied to workspace"
+        fi
+
+        # Pi: symlink K-Dense skills
+        if [ -d "$HOME/.pi/agent" ]; then
+            local pi_science_count=0
+            for dir in "$SCIENCE_DIR/scientific-skills"/*/; do
+                skill_name=$(basename "$dir")
+                [ ! -f "$dir/SKILL.md" ] && continue
+                if [ ! -e "$HOME/.pi/agent/skills/$skill_name" ]; then
+                    ln -s "$dir" "$HOME/.pi/agent/skills/$skill_name"
+                    pi_science_count=$((pi_science_count + 1))
+                fi
+            done
+            success "Pi: $pi_science_count K-Dense scientific skills linked"
+        fi
+
+        # Codex: handled by update-ecc.sh which properly sanitizes YAML
+        if [ -d "$HOME/.codex/skills" ]; then
+            log "Codex K-Dense skills will be synced by update-ecc.sh (proper YAML sanitization)"
+        fi
+    fi
 }
 
 # =============================================================================
@@ -536,6 +671,7 @@ uninstall() {
     # Remove installed files
     rm -rf "$ECC_DIR"
     rm -rf "$CURATED_DIR"
+    rm -rf "$SCIENCE_DIR"
     rm -rf "$SKILLS_CACHE_DIR"
     # Remove Claude Code native skills (only ECC-originated ones)
     if [ -d "$HOME/.claude/skills" ]; then
@@ -557,13 +693,17 @@ show_usage() {
     # Count skills
     ECC_COUNT=0
     CURATED_COUNT=0
+    SCIENCE_COUNT=0
     if [ -d "$ECC_DIR/skills" ]; then
         ECC_COUNT=$(find "$ECC_DIR/skills" -name '*.md' ! -path '*/learned/*' 2>/dev/null | wc -l | tr -d ' ')
     fi
     if [ -d "$CURATED_DIR" ]; then
         CURATED_COUNT=$(find "$CURATED_DIR" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
     fi
-    TOTAL_COUNT=$((ECC_COUNT + CURATED_COUNT))
+    if [ -d "$SCIENCE_DIR/scientific-skills" ]; then
+        SCIENCE_COUNT=$(find "$SCIENCE_DIR/scientific-skills" -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    TOTAL_COUNT=$((ECC_COUNT + CURATED_COUNT + SCIENCE_COUNT))
 
     # Determine which rc file to tell the user to source
     local reload_rc
@@ -582,6 +722,7 @@ show_usage() {
 Skills loaded:
   - ECC skills:           $ECC_COUNT
   - Curated skills:       $CURATED_COUNT (Anthropic Official + Community + Codex)
+  - Scientific skills:    $SCIENCE_COUNT (K-Dense Agent Skills)
   - Total:                $TOTAL_COUNT
 
 Activate:  source $reload_rc   (or restart terminal)
@@ -601,10 +742,11 @@ To bypass skills (raw commands):
 To list skills:
   ls ~/.claude-everything-claude-code/skills/   # ECC skills
   ls ~/.claude-curated-skills/                   # Curated skills
+  ls ~/.claude-scientific-skills/scientific-skills/  # K-Dense scientific skills
   ls ~/.claude/skills-cache/                     # Combined cache
 
-To reinstall with curated skills:
-  ~/.claude/scripts/safe-install.sh --with-curated
+To reinstall with curated + scientific skills:
+  ~/.claude/scripts/safe-install.sh --with-curated --with-science
 
 To uninstall:
   ~/.claude/scripts/safe-install.sh --uninstall
@@ -623,6 +765,7 @@ fi
 
 install_ecc_skills
 install_curated_skills
+install_science_skills
 create_loader
 setup_shell_integration
 link_native_skills
