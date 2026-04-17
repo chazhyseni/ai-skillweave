@@ -2,7 +2,7 @@
 # Installed to ~/.codex/config.toml by scripts/setup-codex.sh
 #
 # Placeholders:
-#   {{OLLAMA_MODEL}} - replace with model name e.g. qwen3.5:397b-cloud
+#   {{OLLAMA_MODEL}} - replace with model name e.g. qwen3:32b
 
 # Use the ollama-launch custom provider (OpenAI-compatible, localhost:11434/v1)
 # Note: model_provider="oss" is not recognized in config.toml (only works as --oss CLI flag)

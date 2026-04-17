@@ -69,7 +69,7 @@ section() { echo ""; echo -e "${CYAN}══════════════�
 # =============================================================================
 # Parse arguments
 # =============================================================================
-OLLAMA_MODEL="glm-5.1:cloud"
+OLLAMA_MODEL="qwen3:32b"
 SKIP_SKILLS=false
 WITH_SCIENCE=true
 WITH_CURATED=true

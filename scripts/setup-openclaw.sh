@@ -8,7 +8,7 @@
 #
 # Usage:
 #   scripts/setup-openclaw.sh [--model MODEL_NAME]
-#   --model : override the Ollama model (default: qwen3.5:397b-cloud)
+#   --model : override the Ollama model (default: qwen3:32b)
 # =============================================================================
 set -e
 
@@ -23,7 +23,7 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Parse args
-OLLAMA_MODEL="qwen3.5:397b-cloud"
+OLLAMA_MODEL="qwen3:32b"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --model) OLLAMA_MODEL="$2"; shift 2 ;;

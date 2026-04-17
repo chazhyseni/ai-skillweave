@@ -177,7 +177,7 @@ ollama serve          # Linux (or use systemd)
 
 ```bash
 # Cloud model — no download needed, streams from Ollama's servers:
-ollama pull glm-5.1:cloud         # or minimax-m2.7:cloud
+ollama pull qwen3:32b               # or deepseek-r1:14b
 
 # Local model — runs on your machine (~2GB download):
 ollama pull llama3.2:3b           # fast, good for subagents
@@ -473,21 +473,19 @@ All model names ending in `-cloud` or `:cloud` are Ollama cloud-hosted (no local
 
 | Model | Type | Context | Best for |
 |-------|------|---------|---------|
-| `glm-5.1:cloud` | ☁️ Cloud | 1M tokens | Default — reasoning, multimodal, Claude Code |
-| `minimax-m2.7:cloud` | ☁️ Cloud | 1M tokens | Long context, multimodal, Claude Code / Cline |
-| `qwen3.5:397b-cloud` | ☁️ Cloud | 256K | Reasoning, complex tasks, OpenClaw / Pi / Codex |
-| `qwen3.5:cloud` | ☁️ Cloud | 256K | Same endpoint as 397b-cloud |
-| `qwen3.5-claude:latest` | ☁️ Cloud | 256K | Claude-optimized fine-tune |
-| `qwen3.6:35b-a3b` | 💻 Local | 256K | Latest Qwen, MoE, 24GB VRAM |
+| `qwen3:32b` | 💻 Local | 256K | Default — strong reasoning, general-purpose |
+| `deepseek-r1:14b` | 💻 Local | 128K | Chain-of-thought reasoning |
+| `gemma3:12b` | 💻 Local | 128K | Multimodal, instruction following |
+| `glm4:9b` | 💻 Local | 128K | Chinese+English bilingual, reasoning |
 | `llama3.2:3b` | 💻 Local | 128K | Fast, ~5-10 sec, good for subagents |
 | `qwen2.5-coder:7b` | 💻 Local | 128K | Coding tasks, offline use |
 
 ```bash
 # Configure for Claude Code (large context tasks):
-./install.sh --model glm-5.1:cloud
+./install.sh --model qwen3:32b
 
 # Configure for OpenClaw / Pi / Codex (complex reasoning):
-./install.sh --model minimax-m2.7:cloud
+./install.sh --model deepseek-r1:14b
 
 # Add a local fallback model (no internet needed):
 ollama pull llama3.2:3b

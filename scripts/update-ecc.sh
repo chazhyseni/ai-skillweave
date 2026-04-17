@@ -224,7 +224,7 @@ fi
 log "Re-syncing skills to harnesses (with YAML sanitization)..."
 
 python3 - << 'PYEOF'
-import os, re, shutil
+import os, re, shutil, glob
 
 home = os.path.expanduser("~")
 ecc_dir = os.path.join(home, ".claude-everything-claude-code", "skills")
@@ -410,6 +410,47 @@ if os.path.isdir(os.path.join(home, ".codex")):
         if sync_to_harness_symlink_or_sanitize(skill_name, skill_dir, codex_skills):
             stats["codex"]["added"] += 1
     stats["codex"]["total"] = len(os.listdir(codex_skills))
+
+# --- Claude Code: directory-based skills (<name>/SKILL.md) ---
+# Claude Code's /skills command ONLY discovers <name>/SKILL.md directory format,
+# NOT flat .md files. Migrate stale flat files and sync all skills.
+claude_skills = os.path.join(home, ".claude", "skills")
+if os.path.isdir(os.path.join(home, ".claude")):
+    os.makedirs(claude_skills, exist_ok=True)
+    # Migrate stale flat .md files to directory format
+    migrated = 0
+    for flat_file in glob.glob(os.path.join(claude_skills, "*.md")):
+        skill_name = os.path.splitext(os.path.basename(flat_file))[0]
+        dir_path = os.path.join(claude_skills, skill_name)
+        if os.path.isdir(dir_path):
+            # Directory already exists; remove stale flat file
+            os.remove(flat_file)
+            migrated += 1
+            continue
+        # Move flat file into directory format
+        os.makedirs(dir_path, exist_ok=True)
+        shutil.move(flat_file, os.path.join(dir_path, "SKILL.md"))
+        migrated += 1
+    # Sync all skill sources
+    claude_updated = 0
+    for skill_name, skill_dir in all_skills.items():
+        src = os.path.join(skill_dir, "SKILL.md")
+        if not os.path.exists(src):
+            continue
+        dst_dir = os.path.join(claude_skills, skill_name)
+        dst = os.path.join(dst_dir, "SKILL.md")
+        src_mtime = os.path.getmtime(src)
+        dst_mtime = os.path.getmtime(dst) if os.path.exists(dst) else 0
+        if src_mtime > dst_mtime:
+            os.makedirs(dst_dir, exist_ok=True)
+            shutil.copy2(src, dst)
+            claude_updated += 1
+    # Also sync learned skills (flat .md in learned/ subdir — leave as-is)
+    claude_total = len([d for d in os.listdir(claude_skills)
+                        if os.path.isdir(os.path.join(claude_skills, d)) and d != "learned"])
+    if migrated > 0:
+        print(f"\033[0;32m[OK]\033[0m Claude Code: migrated {migrated} flat .md skills to directory format")
+    print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
 total = len(all_skills)
 print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) = {total} unique skill dirs")

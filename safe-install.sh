@@ -506,6 +506,30 @@ setup_shell_integration() {
 # Step 4b: Symlink ECC skills into native skills dirs for codex and pi
 # =============================================================================
 
+_migrate_flat_to_dir_skills() {
+    # Migrate flat .md files to <name>/SKILL.md directory format.
+    # Claude Code's /skills command only discovers directory-format skills.
+    local skills_dir="$HOME/.claude/skills"
+    [ ! -d "$skills_dir" ] && return 0
+    local migrated=0
+    for flat_file in "$skills_dir"/*.md; do
+        [ ! -f "$flat_file" ] && continue
+        local skill_name
+        skill_name=$(basename "$flat_file" .md)
+        # Skip learned/ subdirectory (uses flat .md by convention)
+        [ "$skill_name" = "learned" ] && continue
+        # Skip if directory already exists (already migrated)
+        if [ -d "$skills_dir/$skill_name" ]; then
+            rm -f "$flat_file"
+            continue
+        fi
+        mkdir -p "$skills_dir/$skill_name"
+        mv "$flat_file" "$skills_dir/$skill_name/SKILL.md"
+        migrated=$((migrated + 1))
+    done
+    [ "$migrated" -gt 0 ] && success "Migrated $migrated flat .md skills to directory format"
+}
+
 link_native_skills() {
     log "Step 4b: Linking ECC skills into native harness skill directories..."
 
@@ -514,11 +538,12 @@ link_native_skills() {
         return 0
     fi
 
-    # Claude Code: ~/.claude/skills/<skill-name>.md (flat markdown files)
-    # This is what Claude Code's /skills command reads. Skills placed here work
-    # regardless of launch method (direct, ollama launch, VSCode extension).
+    # Claude Code: ~/.claude/skills/<skill-name>/SKILL.md (directory format)
+    # Claude Code's /skills command ONLY discovers directory-format skills,
+    # NOT flat .md files. Migrate any stale flat files first.
     local claude_skills_dir="$HOME/.claude/skills"
     mkdir -p "$claude_skills_dir"
+    _migrate_flat_to_dir_skills
     local claude_count=0
     for dir in "$ECC_DIR/skills"/*/; do
         skill_name=$(basename "$dir")
@@ -530,13 +555,15 @@ link_native_skills() {
             src_file=$(find "$dir" -maxdepth 1 -name '*.md' -type f 2>/dev/null | head -1)
         fi
         [ -z "$src_file" ] && continue
-        local dst="$claude_skills_dir/${skill_name}.md"
+        local dst_dir="$claude_skills_dir/$skill_name"
+        local dst="$dst_dir/SKILL.md"
         if [ ! -f "$dst" ]; then
+            mkdir -p "$dst_dir"
             cp "$src_file" "$dst"
             claude_count=$((claude_count + 1))
         fi
     done
-    local total_count=$(ls "$claude_skills_dir"/*.md 2>/dev/null | wc -l | tr -d ' ')
+    local total_count=$(find "$claude_skills_dir" -mindepth 1 -maxdepth 1 -type d ! -name 'learned' 2>/dev/null | wc -l | tr -d ' ')
     if [ "$claude_count" -eq 0 ] && [ "$total_count" -gt 0 ]; then
         success "Claude Code: all ECC skills already in ~/.claude/skills/ ($total_count total)"
     else
@@ -598,15 +625,17 @@ link_native_skills() {
 
     # K-Dense Scientific Skills: install into Claude Code native skills dir
     # These are directory-based skills (SKILL.md + references/ + scripts/ + assets/)
-    # Claude Code supports both flat .md files and directory-based skills
+    # Claude Code ONLY discovers <name>/SKILL.md directory format
     if [ -d "$SCIENCE_DIR/scientific-skills" ]; then
         local science_count=0
         for dir in "$SCIENCE_DIR/scientific-skills"/*/; do
             skill_name=$(basename "$dir")
             [ ! -f "$dir/SKILL.md" ] && continue
-            # Claude Code: flat .md file (SKILL.md content)
-            local dst="$claude_skills_dir/${skill_name}.md"
+            # Claude Code: directory format (<name>/SKILL.md)
+            local dst_dir="$claude_skills_dir/$skill_name"
+            local dst="$dst_dir/SKILL.md"
             if [ ! -f "$dst" ]; then
+                mkdir -p "$dst_dir"
                 cp "$dir/SKILL.md" "$dst"
                 science_count=$((science_count + 1))
             fi

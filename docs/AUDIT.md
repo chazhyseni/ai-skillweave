@@ -57,9 +57,9 @@ cloud proxy response copy failed ... error="read: connection reset by peer"
 ### ⚠️ ONGOING: All models are cloud-hosted (no local inference)
 
 **Status:** All 3 Ollama models use SIZE: `-` (cloud-hosted):
-- `qwen3.5:397b-cloud` — routes through Ollama cloud proxy
-- `qwen3.5:cloud` — same cloud endpoint
-- `qwen3.5-claude:latest` — modelfile variant
+- `qwen3:32b` — local Ollama model, 256K context
+- `deepseek-r1:14b` — local Ollama model, 128K context, chain-of-thought
+- `llama3.2:3b` — local Ollama model, 128K context, fast for subagents
 
 **Mitigations:**
 1. Keep individual subagent tasks under ~5 minutes
