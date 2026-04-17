@@ -177,7 +177,7 @@ ollama serve          # Linux (or use systemd)
 
 ```bash
 # Cloud model — no download needed, streams from Ollama's servers:
-ollama pull qwen3.5:397b-cloud    # or minimax-m2.7:cloud
+ollama pull glm-5.1:cloud         # or minimax-m2.7:cloud
 
 # Local model — runs on your machine (~2GB download):
 ollama pull llama3.2:3b           # fast, good for subagents
@@ -265,11 +265,14 @@ sudo dnf install python3
 ## Install Options
 
 ```bash
-# Full setup (default model: qwen3.5:397b-cloud)
+# Full setup — all harnesses, all skills (ECC + K-Dense scientific), default model
 ./install.sh
 
+# Skip K-Dense scientific skills (faster, fewer skills)
+./install.sh --without-science
+
 # Use a local model instead (faster, no cloud dependency)
-./install.sh --model llama3.2:3b
+./install.sh --model qwen2.5-coder:7b
 ./install.sh --model qwen2.5-coder:7b
 
 # Configure only specific harnesses
@@ -470,23 +473,25 @@ All model names ending in `-cloud` or `:cloud` are Ollama cloud-hosted (no local
 
 | Model | Type | Context | Best for |
 |-------|------|---------|---------|
+| `glm-5.1:cloud` | ☁️ Cloud | 1M tokens | Default — reasoning, multimodal, Claude Code |
 | `minimax-m2.7:cloud` | ☁️ Cloud | 1M tokens | Long context, multimodal, Claude Code / Cline |
 | `qwen3.5:397b-cloud` | ☁️ Cloud | 256K | Reasoning, complex tasks, OpenClaw / Pi / Codex |
 | `qwen3.5:cloud` | ☁️ Cloud | 256K | Same endpoint as 397b-cloud |
 | `qwen3.5-claude:latest` | ☁️ Cloud | 256K | Claude-optimized fine-tune |
+| `qwen3.6:35b-a3b` | 💻 Local | 256K | Latest Qwen, MoE, 24GB VRAM |
 | `llama3.2:3b` | 💻 Local | 128K | Fast, ~5-10 sec, good for subagents |
 | `qwen2.5-coder:7b` | 💻 Local | 128K | Coding tasks, offline use |
 
 ```bash
 # Configure for Claude Code (large context tasks):
-./install.sh --model minimax-m2.7:cloud
+./install.sh --model glm-5.1:cloud
 
 # Configure for OpenClaw / Pi / Codex (complex reasoning):
-./install.sh --model qwen3.5:397b-cloud
+./install.sh --model minimax-m2.7:cloud
 
 # Add a local fallback model (no internet needed):
 ollama pull llama3.2:3b
-./install.sh --model llama3.2:3b
+./install.sh --model qwen2.5-coder:7b
 ```
 
 ---
@@ -507,7 +512,7 @@ When Claude Code is working inside any repo, `codesight --mcp` provides a real-t
 
 ### How it's integrated
 
-`codesight` runs as an MCP server — one of the 7 servers applied automatically by `./install.sh`:
+`codesight` runs as an MCP server — one of the 8 servers applied automatically by `./install.sh`:
 
 ```bash
 # Claude Code queries this server for codebase context automatically

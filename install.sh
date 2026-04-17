@@ -11,8 +11,8 @@
 #   - Claude Code, OpenClaw, Pi, and/or Codex installed as needed
 #
 # Usage:
-#   ./install.sh                           # Full setup (all harnesses)
-#   ./install.sh --with-science            # Full setup + K-Dense scientific skills
+#   ./install.sh                           # Full setup (all harnesses + all skills)
+#   ./install.sh --without-science         # Skip K-Dense scientific skills
 #   ./install.sh --model llama3.2:3b       # Use a specific Ollama model
 #   ./install.sh --skip-skills             # Skip ECC skills installation
 #   ./install.sh --only claude             # Only configure claude
@@ -71,15 +71,16 @@ section() { echo ""; echo -e "${CYAN}══════════════�
 # =============================================================================
 OLLAMA_MODEL="glm-5.1:cloud"
 SKIP_SKILLS=false
-WITH_SCIENCE=false
+WITH_SCIENCE=true
 ONLY_TARGET=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --model)          OLLAMA_MODEL="$2"; shift 2 ;;
-        --skip-skills)    SKIP_SKILLS=true; shift ;;
-        --with-science)   WITH_SCIENCE=true; shift ;;
-        --only)           ONLY_TARGET="$2"; shift 2 ;;
+        --model)            OLLAMA_MODEL="$2"; shift 2 ;;
+        --skip-skills)      SKIP_SKILLS=true; shift ;;
+        --with-science)     WITH_SCIENCE=true; shift ;;
+        --without-science)  WITH_SCIENCE=false; shift ;;
+        --only)             ONLY_TARGET="$2"; shift 2 ;;
         --uninstall)
             "$REPO_DIR/safe-install.sh" --uninstall
             exit 0
@@ -89,7 +90,10 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --help|-h)
-            echo "Usage: ./install.sh [--model MODEL] [--skip-skills] [--only TARGET] [--uninstall] [--verify]"
+            echo "Usage: ./install.sh [--model MODEL] [--skip-skills] [--with-science] [--without-science] [--only TARGET] [--uninstall] [--verify]"
+            echo ""
+            echo "  --with-science     Include K-Dense scientific skills (default)"
+            echo "  --without-science  Skip K-Dense scientific skills"
             exit 0
             ;;
         *) shift ;;
