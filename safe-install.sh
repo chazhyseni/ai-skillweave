@@ -771,6 +771,6 @@ install_ecc_skills
 install_curated_skills
 install_science_skills
 create_loader
-setup_shell_integration
 link_native_skills
+setup_shell_integration || true
 show_usage
