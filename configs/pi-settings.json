@@ -1,0 +1,15 @@
+{
+  "_comment": "Pi agent settings template. Installed to ~/.pi/agent/settings.json by scripts/setup-pi.sh",
+  "_placeholders": {
+    "{{OLLAMA_MODEL}}": "default model e.g. qwen3:32b"
+  },
+
+  "defaultModel": "{{OLLAMA_MODEL}}",
+  "defaultProvider": "ollama",
+  "defaultThinkingLevel": "high",
+  "skillsDir": "{{HOME}}/.pi/agent/skills",
+  "packages": [
+    "npm:pi-subagents",
+    "https://github.com/davebcn87/pi-autoresearch"
+  ]
+}

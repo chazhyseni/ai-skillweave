@@ -1,0 +1,31 @@
+# Codex (OpenAI Codex CLI) configuration
+# Installed to ~/.codex/config.toml by scripts/setup-codex.sh
+#
+# Placeholders:
+#   {{OLLAMA_MODEL}} - replace with model name e.g. qwen3:32b
+
+# Use the ollama-launch custom provider (OpenAI-compatible, localhost:11434/v1)
+# Note: model_provider="oss" is not recognized in config.toml (only works as --oss CLI flag)
+model_provider = "ollama-launch"
+model = "{{OLLAMA_MODEL}}"
+
+# Allow writing to any path (not just workspace dir).
+# Default is workspace-write which blocks edits to files outside the working directory.
+# Change to "workspace-write" if you want stricter sandboxing.
+sandbox = "danger-full-access"
+
+[projects."{{HOME}}"]
+trust_level = "trusted"
+
+# Disabled: requires network access to chatgpt.com which may be blocked by corporate proxy
+[plugins."github@openai-curated"]
+enabled = false
+
+[profiles.ollama-launch]
+openai_base_url = "http://127.0.0.1:11434/v1/"
+forced_login_method = "api"
+model_provider = "ollama-launch"
+
+[model_providers.ollama-launch]
+name = "Ollama"
+base_url = "http://127.0.0.1:11434/v1/"

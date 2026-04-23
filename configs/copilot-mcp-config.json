@@ -1,0 +1,59 @@
+{
+  "_comment": "MCP servers for GitHub Copilot CLI (~/.copilot/mcp-config.json).",
+  "_install": "Run: scripts/setup-copilot.sh — merges these into ~/.copilot/mcp-config.json automatically.",
+  "_note": "Copilot CLI supports command and http type MCP servers via --additional-mcp-config.",
+
+  "mcpServers": {
+    "memory": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "sequential-thinking": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "context7": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "playwright": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@playwright/mcp", "--browser", "chrome"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "google-docs-editor": {
+      "command": "node",
+      "args": ["{{HOME}}/mcp-servers/google-docs-editor/build/index.js"],
+      "env": {}
+    },
+    "token-optimizer": {
+      "command": "token-optimizer-mcp",
+      "args": [],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "codesight": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "codesight", "--mcp"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "skillgraph": {
+      "type": "http",
+      "url": "https://skillgraph.pipette.bio/mcp"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "sequential-thinking": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "context7": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "playwright": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "@playwright/mcp", "--browser", "chrome"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "token-optimizer": {
+      "command": "token-optimizer-mcp",
+      "args": [],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    },
+    "codesight": {
+      "command": "{{NPX_PATH}}",
+      "args": ["-y", "codesight", "--mcp"],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "{{CA_CERT_PATH}}"
+      }
+    }
+  }
+}
