@@ -1,6 +1,6 @@
 # LinkedIn Post: ai-skillweave
 
-AI agents start from zero every session. No skills. No memory. No tools.
+Most AI agent setups are stateless by default. Without configuration, they don't retain your corrections, domain expertise, or custom conventions across sessions.
 
 ai-skillweave fixes that.
 

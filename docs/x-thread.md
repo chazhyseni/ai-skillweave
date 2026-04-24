@@ -1,7 +1,7 @@
 # X/Twitter Thread: ai-skillweave
 
 ## Post 1 (Main)
-Every AI agent session starts from zero.
+Most AI agent setups are stateless by default. Without configuration, they don't retain your corrections, domain expertise, or custom conventions across sessions.
 
 ai-skillweave changes that: one install loads ~450 skills + MCP servers into Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Structured expertise, not guesswork.
 
