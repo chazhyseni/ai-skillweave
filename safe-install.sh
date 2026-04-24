@@ -139,7 +139,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 command -v python3 >/dev/null 2>&1 || error "python3 is required but could not be installed"
 
-# Pre-install Python dependencies for SOTA v3 auto-learning
+# Pre-install Python dependencies for auto-learning pipeline
 log "Installing Python dependencies for skill extraction..."
 _install_python_deps() {
     local pkgs="sentence-transformers>=3.0.0 scikit-learn>=1.5.0"

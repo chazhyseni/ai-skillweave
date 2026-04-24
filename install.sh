@@ -223,7 +223,7 @@ section "Preflight"
 
 command -v python3 >/dev/null 2>&1 || error "python3 required ($PKG_HINT python3)"
 
-# Install Python dependencies for SOTA v3 auto-learning pipeline
+# Install Python dependencies for auto-learning pipeline
 log "Installing Python dependencies for skill extraction (sentence-transformers, scikit-learn)..."
 _install_python_deps() {
     local pkgs="sentence-transformers>=3.0.0 scikit-learn>=1.5.0"

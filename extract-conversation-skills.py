@@ -979,7 +979,7 @@ class Consolidation:
         return merged
 
     def abstract_group(self, group: PatternGroup) -> PatternGroup:
-        """SOTA v3: LLM-only abstraction. No templates, no keywords."""
+        """LLM-only abstraction. No templates, no keywords."""
         distilled = self._llm_distill(group)
         if distilled:
             if len(distilled) == 4:
@@ -994,7 +994,7 @@ class Consolidation:
         return group
 
     def _llm_distill(self, group: PatternGroup) -> Optional[Tuple[str, str, str]]:
-        """SOTA v3: LLM-only abstraction via single-pass distillation."""
+        """LLM-only abstraction via single-pass distillation."""
         if not self.use_llm:
             return None
         return self._llm_distill_single(group)
@@ -1224,7 +1224,7 @@ class SkillWriter:
             "",
             "## When to Use",
             "",
-            f"{skill.condition}.",
+            f"{skill.condition.rstrip('.')}.",
             "",
             "## Operating Principles",
             "",
@@ -1533,7 +1533,7 @@ class Pipeline:
         passing = self.learning.apply_thresholds(groups)
         print(f"Stage 2: {len(passing)}/{len(groups)} groups pass thresholds (freq≥{self.min_occurrences}, conf≥{MIN_CONFIDENCE})")
 
-        # Stage 3: Consolidation (LLM-only abstraction — SOTA v3)
+        # Stage 3: Consolidation (LLM-only abstraction)
         if self.verbose:
             print("\n=== Stage 3: Consolidation ===")
         deduped = self.consolidation.deduplicate(passing)
@@ -1803,7 +1803,7 @@ def main():
 
     args = parser.parse_args()
     
-    # SOTA v3: auto-install dependencies and auto-enable LLM if Ollama is available
+    # Auto-install dependencies and auto-enable LLM if Ollama is available
     _ensure_deps(verbose=args.verbose)
     
     if not args.llm:
@@ -1811,9 +1811,9 @@ def main():
         import shutil
         if shutil.which("ollama"):
             args.llm = True
-            print("  [INFO] Ollama detected; auto-enabling --llm (SOTA v3 requires LLM distillation)")
+            print("  [INFO] Ollama detected; auto-enabling --llm (LLM distillation required)")
         else:
-            print("  [WARN] Ollama not found; pipeline will produce 0 skills (SOTA v3 requires LLM distillation)")
+            print("  [WARN] Ollama not found; pipeline will produce 0 skills (LLM distillation required)")
             print("         Install Ollama or run with --llm if using a different LLM backend")
 
     if args.stats:
