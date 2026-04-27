@@ -583,26 +583,28 @@ To update ClawBio bioinformatics skills, re-run with `--with-bio`:
 
 ## Context Window & Skills Injection
 
-### Why Claude was hitting "context limit reached"
+**What changed:** Only your personal learned skills (`lean-skills.txt`, ~1–2K tokens) are injected at session start. The full combined cache (`combined-skills.txt`, ~5.5MB) is still built for reference and local search, but is never auto-injected.
 
-The original installer injected the full combined skills cache (`combined-skills.txt`, ~5.5MB ≈ **1.375M tokens**) into every Claude session via `--append-system-prompt-file`. Claude Sonnet 4.6 and Opus 4.7 have a **200K token** context window — this means the skills injection alone was **6.9× the entire context budget**, triggering an explicit `context_length_exceeded` error from the Anthropic API on every single session.
+**Why:** The original installer injected the full cache (~1.375M tokens) into every Claude session. Claude's 200K context window was exceeded immediately. Ollama models silently truncated instead of erroring, which masked the problem.
 
-Ollama models (Kimi, Qwen, etc.) silently truncate prompts to their `num_ctx` limit instead of erroring — which is why `ollama launch kimi` seemed to "work" while `ollama launch claude` kept failing.
+**All skills are still available to all harnesses — nothing was removed:**
 
-### The fix: lean-skills injection
+| Harness | How skills are loaded | All ~450 skills? |
+|---------|----------------------|-----------------|
+| Claude Code | Native `/skills` from `~/.claude/skills/` + `lean-skills.txt` injection | ✅ Yes |
+| Copilot CLI | Native discovery from `~/.claude/skills/` | ✅ Yes |
+| Codex | Synced to `~/.codex/skills/` by `update-ecc.sh` | ✅ Yes |
+| Pi | Linked to `~/.pi/agent/skills/` | ✅ Yes |
+| OpenClaw | Copied to `~/.openclaw/workspace/skills/` | ✅ Yes |
 
-The installer now injects **only your personal learned skills** (`lean-skills.txt`) at session start — typically **1–2K tokens** (under 1% of the context window). The full combined cache is still built and stored at `~/.claude/skills-cache/combined-skills.txt` for reference and local search, but is never injected automatically.
+The `lean-skills.txt` change **only** affects what gets injected into Claude's system prompt at session start. Every skill is still present in `~/.claude/skills/` and synced to all harness directories.
+
+**Prompt caching:** Still active via `tengu_system_prompt_global_cache: true` in `~/.claude.json` — the lean block is cached after session 1.
 
 | File | Size | Tokens | Used for |
-|------|------|--------|---------|
-| `lean-skills.txt` | ~6-50KB | ~1.5–12K | Injected into every Claude session via `--append-system-prompt-file` |
-| `combined-skills.txt` | ~5.5MB | ~1.375M | Reference only — local search, update-ecc.sh, never auto-injected |
-
-The ~450 ECC/K-Dense/ClawBio SKILL.md files in `~/.claude/skills/` are loaded natively by Claude Code via its built-in `/skills` feature — and also natively by Copilot CLI via its built-in skill discovery — no injection overhead, loaded on-demand, no context window impact.
-
-### Prompt caching (still active)
-
-Even with lean injection, Claude Code's prompt caching is still configured via `tengu_system_prompt_global_cache: true` in `~/.claude.json` — the lean block is cached after session 1 and reused across sessions.
+|------|------|--------|----------|
+| `lean-skills.txt` | ~6-50KB | ~1.5–12K | Injected at session start |
+| `combined-skills.txt` | ~5.5MB | ~1.375M | Reference / local search only |
 
 ---
 
