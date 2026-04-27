@@ -27,8 +27,8 @@ USE_LLM=true  # LLM distillation is now default
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXTRACTOR="$SCRIPT_DIR/extract-conversation-skills.py"
 LEARNED_DIR="$HOME/.claude/skills/learned"
-LOG_FILE="$SCRIPT_DIR/shared-learnings/sync.log"
-LEARNINGS_MD="$SCRIPT_DIR/shared-learnings/learnings.md"
+LOG_FILE="$SCRIPT_DIR/shared-learning/sync.log"
+LEARNING_MD="$SCRIPT_DIR/shared-learning/learning.md"
 
 BLUE='\033[0;34m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()     { echo -e "${BLUE}[LEARN]${NC} $1"; }
@@ -47,7 +47,7 @@ for arg in "$@"; do
     esac
 done
 
-mkdir -p "$SCRIPT_DIR/shared-learnings"
+mkdir -p "$SCRIPT_DIR/shared-learning"
 mkdir -p "$LEARNED_DIR"
 
 # Stats-only mode
@@ -194,17 +194,17 @@ if [ -d "$HOME/.claude/skills" ] && [ ! -d "$CLAUDE_SKILLS_LEARNED" ]; then
 fi
 
 # =============================================================================
-# Step 3: Update learnings log
+# Step 3: Update learning log
 # =============================================================================
 
-log "Step 3: Updating shared learnings log..."
+log "Step 3: Updating shared learning log..."
 {
     echo ""
     echo "## Sync: $(date)"
     echo "- Learned skills total: $LEARNED_COUNT"
     echo "- Newly synced: $SYNCED"
     echo "- Harnesses updated: codex, pi, openclaw"
-} >> "$LEARNINGS_MD" 2>/dev/null || true
+} >> "$LEARNING_MD" 2>/dev/null || true
 
 echo "$(date) | learned=$LEARNED_COUNT synced=$SYNCED dry_run=$DRY_RUN" >> "$LOG_FILE" 2>/dev/null || true
 

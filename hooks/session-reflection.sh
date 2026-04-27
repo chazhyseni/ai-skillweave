@@ -4,11 +4,11 @@
 
 set -e
 
-echo "[REFLECTION] Session ending, consolidating learnings..."
+echo "[REFLECTION] Session ending, consolidating learning..."
 
 # Run consolidation script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONSOLIDATE_SCRIPT="$SCRIPT_DIR/scripts/consolidate-learnings.py"
+CONSOLIDATE_SCRIPT="$SCRIPT_DIR/scripts/consolidate-learning.py"
 
 if [ -f "$CONSOLIDATE_SCRIPT" ]; then
   python3 "$CONSOLIDATE_SCRIPT"

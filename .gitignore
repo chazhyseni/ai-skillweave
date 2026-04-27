@@ -8,7 +8,7 @@
 *.bak
 
 # Sync logs (regenerated automatically)
-shared-learnings/sync.log
+shared-learning/sync.log
 
 # Codesight generated context (re-generated on each scan)
 .codesight/
@@ -37,7 +37,7 @@ __pycache__/
 copilot-session-*.md
 configs/desktop-skills/
 .cursorrules
-shared-learnings/
+shared-learning/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

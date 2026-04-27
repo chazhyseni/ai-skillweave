@@ -175,7 +175,7 @@ ai-skillweave/
 │   ├── setup-hooks.sh            ← Install PreToolUse hook (codesight-redirect)
 │   ├── setup-learning-hook.sh    ← Install UserPromptSubmit hook (BMO learning capture)
 │   ├── setup-beads.sh            ← Install beads CLI + beads-mcp + bd init (auto-installs Homebrew if needed)
-│   ├── consolidate-learnings.py  ← Consolidate captured events into SKILL.md files
+│   ├── consolidate-learning.py   ← Consolidate captured events into SKILL.md files
 │   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
 │   ├── build-desktop-skills.sh   ← Package .skill files for Desktop upload
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
@@ -191,8 +191,8 @@ ai-skillweave/
 │   ├── AUDIT.md                  ← MCP/subagent audit (what was fixed + why)
 │   └── TROUBLESHOOTING.md        ← Common issues and fixes
 │
-└── shared-learnings/
-    └── learnings.md              ← Cross-harness learned patterns log
+└── shared-learning/
+    └── learning.md               ← Cross-harness learned patterns log
 ```
 
 ---
@@ -466,11 +466,11 @@ Inspired by [bmo-agent](https://github.com/joelhans/bmo-agent). A `UserPromptSub
 | `preference` | "I prefer…", "I always…", "I like…" | "I always want type hints in Python" |
 | `pattern` | "best practice", "convention", "should always" | "Should always validate before pushing" |
 
-Events are saved to `~/.claude/skills/learned/events/` as JSON. At session end (`hooks/session-reflection.sh`), `scripts/consolidate-learnings.py` clusters similar events and writes SKILL.md files with **short, imperative names** (e.g. `verify-output-completeness`, `cite-published-research`).
+Events are saved to `~/.claude/skills/learned/events/` as JSON. At session end (`hooks/session-reflection.sh`), `scripts/consolidate-learning.py` clusters similar events and writes SKILL.md files with **short, imperative names** (e.g. `verify-output-completeness`, `cite-published-research`).
 
 ```bash
 # Manual consolidation (also runs automatically at session end)
-python3 scripts/consolidate-learnings.py
+python3 scripts/consolidate-learning.py
 ```
 
 ### 2. Batch Pipeline (secondary — runs on install/update)
