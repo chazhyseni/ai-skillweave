@@ -167,6 +167,8 @@ if "beads" in config[key] and not force:
     print("beads MCP entry already present (skip — use --force to overwrite)")
     sys.exit(0)
 
+existed = "beads" in config[key]
+
 config[key]["beads"] = {
     "command": "beads-mcp",
     "args": []
@@ -175,7 +177,7 @@ config[key]["beads"] = {
 with open(config_path, "w") as f:
     json.dump(config, f, indent=2)
 
-action = "Updated" if "beads" in config[key] else "Added"
+action = "Updated" if existed else "Added"
 print(f"{action} beads MCP entry in {config_path}")
 PYEOF
 }

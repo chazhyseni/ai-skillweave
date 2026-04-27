@@ -248,6 +248,43 @@ for alias_name in claude openclaw codex ollama pi; do
     fi
 done
 
+# ── Copilot CLI ──
+section "Copilot CLI"
+if command -v copilot >/dev/null 2>&1; then
+    ok "copilot binary found: $(command -v copilot)"
+else
+    warn "copilot not found — install: brew install gh/copilot OR npm install -g @github/copilot-cli"
+fi
+
+if [ -f "$HOME/.copilot/mcp-config.json" ]; then
+    ok "~/.copilot/mcp-config.json present"
+    MCP_COPILOT=$(python3 -c "import json; d=json.load(open('$HOME/.copilot/mcp-config.json')); print(len(d.get('mcpServers',{})))" 2>/dev/null)
+    ok "  MCP servers: $MCP_COPILOT"
+    MCP_COPILOT_NAMES=$(python3 -c "import json; d=json.load(open('$HOME/.copilot/mcp-config.json')); print(' '.join(d.get('mcpServers',{}).keys()))" 2>/dev/null)
+    ok "  Servers: $MCP_COPILOT_NAMES"
+    if python3 -c "import json; d=json.load(open('$HOME/.copilot/mcp-config.json')); exit(0 if 'beads' in d.get('mcpServers',{}) else 1)" 2>/dev/null; then
+        ok "  beads MCP registered"
+    else
+        warn "  beads not in ~/.copilot/mcp-config.json — run: scripts/setup-beads.sh"
+    fi
+else
+    warn "~/.copilot/mcp-config.json not found — run: scripts/setup-copilot.sh"
+    if $FIX; then
+        echo "    → Running setup-copilot.sh..."
+        "$REPO_DIR/scripts/setup-copilot.sh" && ok "Fixed: Copilot MCP config applied"
+    else
+        echo "    → Fix: scripts/setup-copilot.sh"
+    fi
+fi
+
+# Copilot natively loads SKILL.md files from ~/.claude/skills/
+SKILL_MD_COUNT=$(find "$HOME/.claude/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+if [ "$SKILL_MD_COUNT" -gt 0 ] 2>/dev/null; then
+    ok "~/.claude/skills: $SKILL_MD_COUNT SKILL.md files (loaded natively by Copilot as 'personal-claude')"
+else
+    warn "~/.claude/skills: no SKILL.md files found — run: ./safe-install.sh"
+fi
+
 # ── Beads ──
 section "Beads (bd)"
 if command -v bd >/dev/null 2>&1; then

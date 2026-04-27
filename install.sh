@@ -99,12 +99,16 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --help|-h)
-            echo "Usage: ./install.sh [--model MODEL] [--skip-skills] [--with-science] [--without-science] [--with-bio] [--without-bio] [--only TARGET] [--uninstall] [--verify]"
+            echo "Usage: ./install.sh [--model MODEL] [--skip-skills] [--with-science] [--without-science] [--with-bio] [--without-bio] [--with-curated] [--without-curated] [--learn] [--no-learn] [--only TARGET] [--uninstall] [--verify]"
             echo ""
-            echo "  --with-science     Include K-Dense scientific skills (default)"
+            echo "  --with-science     Include K-Dense scientific skills (default: on)"
             echo "  --without-science  Skip K-Dense scientific skills"
-            echo "  --with-bio         Include ClawBio bioinformatics skills (default)"
+            echo "  --with-bio         Include ClawBio bioinformatics skills (default: on)"
             echo "  --without-bio      Skip ClawBio bioinformatics skills"
+            echo "  --with-curated     Include OpenAI Codex curated skills (default: off)"
+            echo "  --without-curated  Skip OpenAI Codex curated skills (default)"
+            echo "  --learn            Run learn pipeline after skill install (default: on)"
+            echo "  --no-learn         Skip learn pipeline"
             echo "  --only TARGET      Run only one component (skills|ollama|claude|openclaw|codex|pi|copilot|beads)"
             exit 0
             ;;

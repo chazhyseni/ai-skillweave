@@ -528,9 +528,10 @@ _pi_with_skills() {
 }
 
 _copilot_with_skills() {
-    # Copilot CLI does NOT load ~/.claude/skills/ natively (different format).
-    # It reads ~/.copilot/mcp-config.json for MCP servers and .github/copilot-instructions.md
-    # for per-repo guidance. This wrapper ensures a clean environment.
+    # Copilot CLI natively discovers SKILL.md files from ~/.claude/skills/ as "personal-claude"
+    # source — no prompt injection needed. It also reads .github/skills, .agents/skills,
+    # ~/.copilot/config/skills, ~/.agents/skills. Use COPILOT_SKILLS_DIRS to add extra dirs.
+    # This wrapper is a passthrough for env cleanup only.
     (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command copilot "$@")
 }
 

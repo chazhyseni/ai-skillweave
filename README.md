@@ -286,7 +286,7 @@ npm install -g @openai/codex
 
 > **Note:** OpenClaw, Pi, Codex, and Copilot are optional. `install.sh` will skip harnesses that aren't installed and show a warning. Ollama is also optional — the installer warns but continues without it.
 >
-> **Copilot CLI caveat:** Copilot loads MCP servers from `~/.copilot/mcp-config.json` (run `scripts/setup-copilot.sh` to configure), but it does **not** load the `~/.claude/skills/` directory natively — SKILL.md skills are a Claude Code/OpenClaw/Pi/Codex format. Copilot uses `.github/copilot-instructions.md` for per-repo guidance instead.
+> **Copilot CLI:** Copilot natively discovers SKILL.md files from `~/.claude/skills/` as its `personal-claude` source — no injection wrapper needed. It also reads `.github/skills`, `.agents/skills`, `~/.copilot/config/skills`, and `~/.agents/skills`. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`. You can see `~400 skills` in Copilot because the full ECC/K-Dense/ClawBio library (246 SKILL.md files) is loaded automatically at startup.
 
 ### 6. Install Python 3
 
@@ -429,6 +429,7 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 | Harness | Skills | How they load |
 |---------|--------|--------------|
 | `claude` / `ollama launch claude` | **~450 native** + lean skills cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + personal learned skills via `lean-skills.txt` (~1-2K tokens, via `--append-system-prompt-file`) + MCP servers |
+| `copilot` (Copilot CLI) | **~246 SKILL.md files** natively | Copilot's built-in skill discovery reads `~/.claude/skills/` as `personal-claude` source automatically — no wrapper needed. Also reads `.github/skills`, `~/.copilot/config/skills`. Disable individual skills via `disabledSkills` in `~/.copilot/settings.json`. Add extra dirs via `COPILOT_SKILLS_DIRS` env var. |
 | `ollama launch openclaw` | **~450 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
 | `ollama launch pi` | **~450 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
 | `ollama launch codex` | **~450 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
@@ -546,11 +547,14 @@ Only **2 of 4 memory types** produce generalizable skills: `heuristic` and `anti
 
 ### Installing ECC
 
+> **Note on defaults:** bare `./safe-install.sh` installs ECC + K-Dense scientific skills + ClawBio bioinformatics (all three are on by default). Use `--without-science` or `--without-bio` to skip a source.
+
 ```bash
-./safe-install.sh                                    # ECC only
+./safe-install.sh                                    # ECC + K-Dense + ClawBio (default — all three)
+./safe-install.sh --without-science --without-bio    # ECC only (fastest)
 ./safe-install.sh --with-science                     # ECC + K-Dense scientific skills (134 skills)
 ./safe-install.sh --with-bio                         # ECC + ClawBio bioinformatics (56 skills)
-./safe-install.sh --with-science --with-bio          # Full install: all skill sources
+./safe-install.sh --with-curated                     # Also include OpenAI Codex curated skills
 ```
 
 ### Keeping ECC Up to Date
@@ -594,7 +598,7 @@ The installer now injects **only your personal learned skills** (`lean-skills.tx
 | `lean-skills.txt` | ~6-50KB | ~1.5–12K | Injected into every Claude session via `--append-system-prompt-file` |
 | `combined-skills.txt` | ~5.5MB | ~1.375M | Reference only — local search, update-ecc.sh, never auto-injected |
 
-The ~450 ECC/K-Dense/ClawBio SKILL.md files in `~/.claude/skills/` are loaded natively by Claude Code via its built-in `/skills` feature — no injection overhead, loaded on-demand, no context window impact.
+The ~450 ECC/K-Dense/ClawBio SKILL.md files in `~/.claude/skills/` are loaded natively by Claude Code via its built-in `/skills` feature — and also natively by Copilot CLI via its built-in skill discovery — no injection overhead, loaded on-demand, no context window impact.
 
 ### Prompt caching (still active)
 
@@ -708,7 +712,7 @@ When Claude Code is working inside any repo, `codesight --mcp` provides a real-t
 
 ### How it's integrated
 
-`codesight` runs as an MCP server — one of the 8 servers applied automatically by `./install.sh`:
+`codesight` runs as an MCP server — one of the 9 servers applied automatically by `./install.sh`:
 
 ```bash
 # Claude Code queries this server for codebase context automatically
@@ -873,7 +877,7 @@ scripts/setup-beads.sh --force    # overwrite existing beads MCP entry
 
 ### Harness-agnostic design
 
-The MCP server (`beads-mcp`) makes beads available in any harness that loads `~/.claude.json` (Claude Code, Copilot) or `~/.copilot/mcp-config.json`. For OpenClaw, Pi, and Codex, `bd prime` output can be pasted directly — the `AGENTS.md` file is what matters for cross-session persistence.
+The MCP server (`beads-mcp`) makes beads available in any harness that loads MCP configs: Claude Code (via `~/.claude.json`) and Copilot CLI (via `~/.copilot/mcp-config.json`). For OpenClaw, Pi, and Codex, `bd prime` output can be pasted directly into the session — the `AGENTS.md` file is what matters for cross-session persistence in those harnesses.
 
 ---
 

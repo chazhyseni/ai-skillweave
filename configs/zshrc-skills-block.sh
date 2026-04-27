@@ -43,9 +43,18 @@ _pi_with_skills() {
     (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command pi "$@")
 }
 
+# Copilot CLI: loads SKILL.md files natively from ~/.claude/skills/ as "personal-claude" source.
+# No prompt injection needed — Copilot discovers them at startup via built-in skill discovery.
+# Also reads .github/skills, .agents/skills, ~/.copilot/config/skills, ~/.agents/skills.
+# Use COPILOT_SKILLS_DIRS env var to add extra skill directories.
+# This wrapper is a passthrough for env cleanup only.
+_copilot_with_skills() {
+    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command copilot "$@")
+}
+
 # Cross-harness skill learner
 alias learn-sync='bash ~/.claude/scripts/sync-learned-skills.sh'
-alias learn-sync-dry='bash ~/.claude/scripts/sync-learned-skills.sh --dry-run --verbose'
+alias learn-sync-dry='bash ~/.claude/scripts/sync-learned-skills.sh --dry-run'
 alias learn-stats='bash ~/.claude/scripts/sync-learned-skills.sh --stats'
 alias learn-prune='bash ~/.claude/scripts/sync-learned-skills.sh --prune'
 
@@ -55,4 +64,5 @@ alias openclaw='_openclaw_with_skills'
 alias codex='_codex_with_skills'
 alias ollama='_ollama_with_skills'
 alias pi='_pi_with_skills'
+alias copilot='_copilot_with_skills'
 # End Skills Layer
