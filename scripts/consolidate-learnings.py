@@ -27,9 +27,8 @@ def load_events():
                 data = json.load(fp)
                 if data.get("status") == "pending":
                     events.append(data)
-        except:
+        except Exception:
             continue
-    return sorted(events, key=lambda e: e.get("timestamp", ""))
 
 def cluster_events(events):
     """
@@ -241,7 +240,7 @@ def mark_processed(events):
                     with open(f, "w") as fp:
                         json.dump(data, fp, indent=2)
                     break
-            except:
+            except Exception:
                 continue
 
 def main():

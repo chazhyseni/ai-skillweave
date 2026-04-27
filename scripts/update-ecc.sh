@@ -67,7 +67,9 @@ cd "$ECC_DIR"
 CURRENT=$(git rev-parse HEAD)
 git fetch origin --quiet
 
-REMOTE=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master 2>/dev/null)
+ORIGIN_BRANCH=$(git remote show origin 2>/dev/null | awk '/HEAD branch/ {print $NF}')
+ORIGIN_BRANCH="${ORIGIN_BRANCH:-main}"
+REMOTE=$(git rev-parse "origin/$ORIGIN_BRANCH" 2>/dev/null)
 
 # Always ensure working tree skills match HEAD (guards against stale installs)
 DIRTY=$(git status --short skills/ 2>/dev/null | grep -c '^.[^?]' || true)
@@ -87,9 +89,9 @@ if [ "$CURRENT" = "$REMOTE" ]; then
     fi
     [[ "$*" == *"--force"* ]] || exit 0
 else
-    BEHIND=$(git log HEAD..origin/main --oneline 2>/dev/null | wc -l | tr -d ' ')
+    BEHIND=$(git log "HEAD..origin/$ORIGIN_BRANCH" --oneline 2>/dev/null | wc -l | tr -d ' ')
     log "ECC has $BEHIND new commit(s). Pulling..."
-    git pull origin main --quiet 2>/dev/null || git pull origin master --quiet
+    git pull origin "$ORIGIN_BRANCH" --quiet
     NEW=$(git rev-parse HEAD)
     success "Updated: $(git log -1 --format='%h %s' HEAD)"
     echo ""
