@@ -358,7 +358,7 @@ if ! $SKIP_SKILLS && should_run "skills"; then
     # safe-install.sh may exit non-zero when 'source <rc>' fails in a non-interactive
     # subshell — this is expected and harmless. Capture exit code to report real failures.
     safe_exit=0
-    SAFE_ARGS=""
+    SAFE_ARGS="--yes"
     $WITH_SCIENCE && SAFE_ARGS="$SAFE_ARGS --with-science"
     $WITH_CURATED && SAFE_ARGS="$SAFE_ARGS --with-curated"
     $WITH_BIO && SAFE_ARGS="$SAFE_ARGS --with-bio"

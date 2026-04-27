@@ -55,6 +55,7 @@ CURATED_ONLY=false
 WITH_SCIENCE=true
 WITH_BIO=true
 WITH_LEARN=true
+FORCE_OVERWRITE=false
 
 for arg in "$@"; do
     case $arg in
@@ -80,8 +81,28 @@ for arg in "$@"; do
         --no-learn)
             WITH_LEARN=false
             ;;
+        --yes)
+            FORCE_OVERWRITE=true
+            ;;
         --uninstall)
-            # Handled in main
+            uninstall
+            exit 0
+            ;;
+        --help|-h)
+            echo "Usage: ./safe-install.sh [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --with-science       Include K-Dense scientific skills (default: on)"
+            echo "  --without-science    Skip K-Dense scientific skills"
+            echo "  --with-bio           Include ClawBio bioinformatics skills (default: on)"
+            echo "  --without-bio        Skip ClawBio bioinformatics skills"
+            echo "  --with-curated       Include Anthropic Official + OpenAI Codex curated skills"
+            echo "  --curated-only       Install only curated skills (skip ECC)"
+            echo "  --no-learn           Skip conversation-derived skill learning pipeline"
+            echo "  --yes                Skip all overwrite prompts (auto-answer Y)"
+            echo "  --uninstall          Remove all installed skills and shell integration"
+            echo "  --help, -h           Show this help message"
+            exit 0
             ;;
     esac
 done
@@ -192,14 +213,18 @@ install_ecc_skills() {
     log "Step 1: Installing ECC skills..."
 
     if [ -d "$ECC_DIR" ]; then
-        warn "Existing ECC installation found: $ECC_DIR"
-        # If stdin is a terminal, prompt interactively; otherwise default to overwrite
-        if [ -t 0 ]; then
-            read -p "Overwrite? [Y/n] " -n 1 -r
-            echo ""
-            if [[ $REPLY =~ ^[Nn]$ ]]; then
-                success "Keeping existing ECC installation"
-                return 0
+        if [ "$FORCE_OVERWRITE" = true ]; then
+            log "Overwriting existing ECC installation (--yes)"
+        else
+            warn "Existing ECC installation found: $ECC_DIR"
+            # If stdin is a terminal, prompt interactively; otherwise default to overwrite
+            if [ -t 0 ]; then
+                read -p "Overwrite? [Y/n] " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    success "Keeping existing ECC installation"
+                    return 0
+                fi
             fi
         fi
         rm -rf "$ECC_DIR"
@@ -289,13 +314,17 @@ install_science_skills() {
     log "Step 2b: Installing K-Dense Scientific Agent Skills..."
 
     if [ -d "$SCIENCE_DIR" ]; then
-        warn "Existing scientific skills found: $SCIENCE_DIR"
-        if [ -t 0 ]; then
-            read -p "Overwrite? [Y/n] " -n 1 -r
-            echo ""
-            if [[ $REPLY =~ ^[Nn]$ ]]; then
-                success "Keeping existing scientific skills"
-                return 0
+        if [ "$FORCE_OVERWRITE" = true ]; then
+            log "Overwriting existing scientific skills (--yes)"
+        else
+            warn "Existing scientific skills found: $SCIENCE_DIR"
+            if [ -t 0 ]; then
+                read -p "Overwrite? [Y/n] " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    success "Keeping existing scientific skills"
+                    return 0
+                fi
             fi
         fi
         rm -rf "$SCIENCE_DIR"
@@ -329,13 +358,17 @@ install_bio_skills() {
     log "Step 2c: Installing ClawBio Bioinformatics Skills..."
 
     if [ -d "$CLAWBIO_DIR" ]; then
-        warn "Existing ClawBio skills found: $CLAWBIO_DIR"
-        if [ -t 0 ]; then
-            read -p "Overwrite? [Y/n] " -n 1 -r
-            echo ""
-            if [[ $REPLY =~ ^[Nn]$ ]]; then
-                success "Keeping existing ClawBio skills"
-                return 0
+        if [ "$FORCE_OVERWRITE" = true ]; then
+            log "Overwriting existing ClawBio skills (--yes)"
+        else
+            warn "Existing ClawBio skills found: $CLAWBIO_DIR"
+            if [ -t 0 ]; then
+                read -p "Overwrite? [Y/n] " -n 1 -r
+                echo ""
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    success "Keeping existing ClawBio skills"
+                    return 0
+                fi
             fi
         fi
         rm -rf "$CLAWBIO_DIR"
@@ -1053,11 +1086,6 @@ USAGE
 # =============================================================================
 # Main
 # =============================================================================
-
-if [[ "$*" == *"--uninstall"* ]]; then
-    uninstall
-    exit 0
-fi
 
 install_ecc_skills
 install_curated_skills
