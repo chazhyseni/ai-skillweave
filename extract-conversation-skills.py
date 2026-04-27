@@ -239,7 +239,6 @@ CLASSIFICATION_MARKERS = {
         r"(?:the\s+(?:api|endpoint|url|server|database)\s+(?:is|at|on))\s+",
         r"(?:the\s+(?:config|setting|variable|flag)\s+(?:is|should\s+be))\s+",
         r"(?:version\s+\d+\.\d+)",
-        r"(?:the\s+password\s+(?:is|was))\s+",
     ],
 }
 

@@ -63,7 +63,7 @@ done
 state_dir="/tmp/claude-hooks-${session_id}"
 mkdir -p "$state_dir"
 # Hash the project dir for a short key
-state_key=$(echo "$codesight_dir" | md5 2>/dev/null || echo "$codesight_dir" | cksum | cut -d' ' -f1)
+state_key=$(printf '%s' "$codesight_dir" | md5 -q 2>/dev/null || printf '%s' "$codesight_dir" | md5sum 2>/dev/null | awk '{print $1}' || printf '%s' "$codesight_dir" | cksum | awk '{print $1}')
 state_key="${state_key:0:8}"
 reminded_file="$state_dir/codesight-${state_key}.done"
 

@@ -42,3 +42,12 @@ You have MCP servers available. Use them INSTEAD of raw built-in tools when appl
 - Do NOT run exploratory commands (find, ls -R, cat) when codesight or smart_read can answer faster.
 - Prefer targeted Grep over broad file scanning.
 - When multiple independent searches are needed, run them in parallel (single message, multiple tool calls).
+
+## Beads Workflow (work item tracking)
+If `bd` (beads) is available, use it for work item tracking across sessions:
+- `bd prime` — get AI-optimised project context at session start (run this first in any project)
+- `bd ready` — list open work items
+- `bd create "Title" -p 2` — create a work item (priority: 1=high, 2=medium, 3=low)
+- `bd update <id> --claim` — claim a work item before starting
+- `bd close <id>` — close a completed item
+Run `bd prime` at the start of a session when working in a repo with a `.beads/` directory.

@@ -95,11 +95,44 @@ else
     fail "~/.claude.json not found — run Claude Code once to initialize"
 fi
 
-if [ -d "$HOME/.claude/skills-cache" ] && [ -f "$HOME/.claude/skills-cache/combined-skills.txt" ]; then
-    SKILL_SIZE=$(wc -c < "$HOME/.claude/skills-cache/combined-skills.txt" | tr -d ' ')
-    ok "Skills cache: $SKILL_SIZE bytes"
+if [ -d "$HOME/.claude/skills-cache" ]; then
+    if [ -f "$HOME/.claude/skills-cache/lean-skills.txt" ]; then
+        LEAN_SIZE=$(wc -c < "$HOME/.claude/skills-cache/lean-skills.txt" | tr -d ' ')
+        LEAN_LINES=$(wc -l < "$HOME/.claude/skills-cache/lean-skills.txt" | tr -d ' ')
+        ok "lean-skills.txt: ${LEAN_SIZE} bytes (${LEAN_LINES} lines) — injected at session start"
+    else
+        fail "lean-skills.txt missing — run: ./safe-install.sh"
+        if $FIX; then
+            "$REPO_DIR/safe-install.sh" && ok "Fixed: skills cache rebuilt"
+        else
+            echo "    → Fix: ./safe-install.sh"
+        fi
+    fi
+    if [ -f "$HOME/.claude/skills-cache/combined-skills.txt" ]; then
+        COMBINED_SIZE=$(wc -c < "$HOME/.claude/skills-cache/combined-skills.txt" | tr -d ' ')
+        ok "combined-skills.txt: ${COMBINED_SIZE} bytes (full library — available for reference)"
+    else
+        warn "combined-skills.txt missing — run: ./safe-install.sh (non-critical)"
+    fi
 else
-    warn "Skills cache missing — run: safe-install.sh"
+    fail "Skills cache missing (~/.claude/skills-cache/) — run: ./safe-install.sh"
+    if $FIX; then
+        "$REPO_DIR/safe-install.sh" && ok "Fixed: skills cache created"
+    else
+        echo "    → Fix: ./safe-install.sh"
+    fi
+fi
+
+# Check learn-sync scripts are in place
+if [ -f "$HOME/.claude/scripts/sync-learned-skills.sh" ]; then
+    ok "~/.claude/scripts/sync-learned-skills.sh present"
+else
+    warn "~/.claude/scripts/sync-learned-skills.sh missing — learn-sync alias won't work"
+    if $FIX; then
+        "$REPO_DIR/safe-install.sh" && ok "Fixed: scripts copied"
+    else
+        echo "    → Fix: ./safe-install.sh (will copy scripts to ~/.claude/scripts/)"
+    fi
 fi
 
 # ── OpenClaw ──
@@ -214,6 +247,35 @@ for alias_name in claude openclaw codex ollama pi; do
         warn "alias '$alias_name' not found in shell rc files"
     fi
 done
+
+# ── Beads ──
+section "Beads (bd)"
+if command -v bd >/dev/null 2>&1; then
+    ok "bd binary found: $(command -v bd)"
+else
+    warn "bd not found — run: scripts/setup-beads.sh"
+    if $FIX; then
+        echo "    → Running setup-beads.sh..."
+        "$REPO_DIR/scripts/setup-beads.sh" && ok "Fixed: beads installed"
+    else
+        echo "    → Fix: scripts/setup-beads.sh"
+    fi
+fi
+
+if command -v beads-mcp >/dev/null 2>&1; then
+    ok "beads-mcp binary found: $(command -v beads-mcp)"
+else
+    warn "beads-mcp not found — MCP integration unavailable (run: scripts/setup-beads.sh)"
+fi
+
+# Check beads MCP entry in Claude Code config
+if [ -f "$HOME/.claude.json" ]; then
+    if python3 -c "import json; d=json.load(open('$HOME/.claude.json')); exit(0 if 'beads' in d.get('mcpServers',{}) else 1)" 2>/dev/null; then
+        ok "beads MCP registered in ~/.claude.json"
+    else
+        warn "beads not in ~/.claude.json mcpServers — run: scripts/setup-beads.sh"
+    fi
+fi
 
 # ── Network / Proxy ──
 section "Network & Proxy"

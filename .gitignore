@@ -13,6 +13,9 @@ shared-learnings/sync.log
 # Codesight generated context (re-generated on each scan)
 .codesight/
 
+# Beads workspace (stealth mode — local context only, not committed)
+.beads/
+
 # macOS
 .DS_Store
 .AppleDouble

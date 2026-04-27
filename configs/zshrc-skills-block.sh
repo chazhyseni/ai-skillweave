@@ -3,14 +3,18 @@
 # Skills Layer — Everything Claude Code
 # =============================================================================
 # All harness commands get the ECC skills injected automatically.
-# Injected by: ~/scripts/agent_harness_modifications/install.sh
-# To remove:   ~/scripts/agent_harness_modifications/install.sh --uninstall
+# Injected by: ai-skillweave/install.sh
+# To remove:   ai-skillweave/safe-install.sh --uninstall
 # =============================================================================
 
-# Claude Code: inject skills via --append-system-prompt-file
+# Claude Code: inject personal learned skills as system prompt supplement.
+# Uses lean-skills.txt (~personal skills only, ~1-2K tokens) NOT combined-skills.txt
+# (~1.4M tokens which would exceed Claude's 200K context window and crash the session).
+# The full 450+ skill library is already natively available via Claude Code's /skills
+# command from ~/.claude/skills/ — no injection needed for those.
 _claude_with_skills() {
     local _skills_file="/tmp/claude-skills-$$.txt"
-    cat ~/.claude/skills-cache/combined-skills.txt > "$_skills_file" 2>/dev/null
+    cat ~/.claude/skills-cache/lean-skills.txt > "$_skills_file" 2>/dev/null
     if [ -s "$_skills_file" ]; then
         (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command claude --append-system-prompt-file "$_skills_file" "$@")
     else
@@ -40,10 +44,10 @@ _pi_with_skills() {
 }
 
 # Cross-harness skill learner
-alias learn-sync='~/scripts/agent_harness_modifications/sync-learned-skills.sh'
-alias learn-sync-dry='~/scripts/agent_harness_modifications/sync-learned-skills.sh --dry-run --verbose'
-alias learn-stats='~/scripts/agent_harness_modifications/sync-learned-skills.sh --stats'
-alias learn-prune='~/scripts/agent_harness_modifications/sync-learned-skills.sh --prune'
+alias learn-sync='bash ~/.claude/scripts/sync-learned-skills.sh'
+alias learn-sync-dry='bash ~/.claude/scripts/sync-learned-skills.sh --dry-run --verbose'
+alias learn-stats='bash ~/.claude/scripts/sync-learned-skills.sh --stats'
+alias learn-prune='bash ~/.claude/scripts/sync-learned-skills.sh --prune'
 
 # Wrapper aliases
 alias claude='_claude_with_skills'

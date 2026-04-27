@@ -15,6 +15,7 @@ CURATED_DIR="$HOME/.claude-curated-skills"
 SCIENCE_DIR="$HOME/.claude-scientific-skills"
 CLAWBIO_DIR="$HOME/.claude-clawbio-skills"
 SKILLS_CACHE_DIR="$HOME/.claude/skills-cache"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Platform detection
 case "$(uname -s)" in
@@ -59,32 +60,25 @@ for arg in "$@"; do
     case $arg in
         --with-curated)
             WITH_CURATED=true
-            shift
             ;;
         --curated-only)
             CURATED_ONLY=true
             WITH_CURATED=true
-            shift
             ;;
         --with-science)
             WITH_SCIENCE=true
-            shift
             ;;
         --without-science)
             WITH_SCIENCE=false
-            shift
             ;;
         --with-bio)
             WITH_BIO=true
-            shift
             ;;
         --without-bio)
             WITH_BIO=false
-            shift
             ;;
         --no-learn)
             WITH_LEARN=false
-            shift
             ;;
         --uninstall)
             # Handled in main
@@ -496,9 +490,12 @@ generate_skills_block() {
 # To disable: run ~/.claude/scripts/safe-install.sh --uninstall
 
 # Helper function to inject skills as system prompt (uses file to avoid arg length limits)
+# Uses lean-skills.txt (personal learned skills only, ~1-2K tokens) instead of
+# combined-skills.txt (~1.4M tokens — exceeds Claude's 200K context window).
+# The full 450+ skill library loads natively via ~/.claude/skills/ (/skills command).
 _claude_with_skills() {
     local _skills_file="/tmp/claude-skills-$$.txt"
-    cat ~/.claude/skills-cache/combined-skills.txt > "$_skills_file" 2>/dev/null
+    cat ~/.claude/skills-cache/lean-skills.txt > "$_skills_file" 2>/dev/null
     if [ -s "$_skills_file" ]; then
         (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command claude --append-system-prompt-file "$_skills_file" "$@")
     else
@@ -634,7 +631,34 @@ setup_shell_integration() {
 }
 
 # =============================================================================
-# Step 4b: Symlink ECC skills into native skills dirs for codex and pi
+# Step 4b: Copy learning pipeline scripts to ~/.claude/scripts/
+# =============================================================================
+# The generated shell aliases (learn-sync, learn-stats, etc.) reference
+# ~/.claude/scripts/sync-learned-skills.sh. This step ensures those files exist.
+
+copy_scripts_to_claude_dir() {
+    local scripts_dest="$HOME/.claude/scripts"
+    mkdir -p "$scripts_dest"
+
+    local scripts_to_copy=(
+        "sync-learned-skills.sh"
+        "extract-conversation-skills.py"
+        "safe-install.sh"
+    )
+    local copied=0
+    for script in "${scripts_to_copy[@]}"; do
+        local src="$REPO_DIR/$script"
+        if [ -f "$src" ]; then
+            cp "$src" "$scripts_dest/$script"
+            chmod +x "$scripts_dest/$script" 2>/dev/null || true
+            copied=$((copied + 1))
+        fi
+    done
+    success "Copied $copied learning pipeline scripts to $scripts_dest/"
+}
+
+# =============================================================================
+# Step 4c: Symlink ECC skills into native skills dirs for codex and pi
 # =============================================================================
 
 _migrate_flat_to_dir_skills() {
@@ -910,7 +934,7 @@ uninstall() {
     log "Uninstalling skills layer..."
 
     # Remove shell integration from all possible rc files
-    for rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+    for rc_file in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
         if [ -f "$rc_file" ]; then
             if grep -q "# Skills Layer" "$rc_file" 2>/dev/null; then
                 sed -i.bak '/# Skills Layer/,/# End Skills Layer/d' "$rc_file" 2>/dev/null || true
@@ -919,21 +943,38 @@ uninstall() {
         fi
     done
 
-    # Remove installed files
+    # Remove installed skill library clones
     rm -rf "$ECC_DIR"
     rm -rf "$CURATED_DIR"
     rm -rf "$SCIENCE_DIR"
     rm -rf "$CLAWBIO_DIR"
     rm -rf "$SKILLS_CACHE_DIR"
-    # Remove Claude Code native skills (only ECC-originated ones)
+
+    # Remove only ECC-originated skills from Claude Code native skills dir.
+    # Does NOT rm -rf ~/.claude/skills to protect user-created and learned skills.
     if [ -d "$HOME/.claude/skills" ]; then
-        rm -rf "$HOME/.claude/skills"
-        success "Removed ~/.claude/skills/"
+        local removed_count=0
+        # Remove symlinks (Pi/ECC-style) and dirs we installed
+        for entry in "$HOME/.claude/skills"/*/; do
+            [ -L "$entry" ] && rm "$entry" && removed_count=$((removed_count + 1)) && continue
+            [ -f "${entry}SKILL.md" ] && rm -rf "$entry" && removed_count=$((removed_count + 1))
+        done
+        success "Removed $removed_count installed skills from ~/.claude/skills/"
+        # Remove the learned/ subdir only if user explicitly asks
+        # (learned skills are personal — never auto-delete)
     fi
+
+    # Remove copied learning pipeline scripts
+    local scripts_dest="$HOME/.claude/scripts"
+    for script in "sync-learned-skills.sh" "extract-conversation-skills.py" "safe-install.sh"; do
+        [ -f "$scripts_dest/$script" ] && rm "$scripts_dest/$script" && success "Removed $scripts_dest/$script"
+    done
+    # Remove scripts dir if now empty
+    rmdir "$scripts_dest" 2>/dev/null || true
 
     success "Uninstall complete"
     echo ""
-    echo "Note: Your original ~/.claude/ config was never modified."
+    echo "Note: ~/.claude/skills/learned/ (personal learned skills) was preserved."
     echo "Run 'source ~/.zshrc' or 'source ~/.bashrc' or restart terminal to fully clean up."
 }
 
@@ -1036,5 +1077,6 @@ install_bio_skills
 create_loader
 link_native_skills
 setup_shell_integration || true
+copy_scripts_to_claude_dir || true
 
 show_usage

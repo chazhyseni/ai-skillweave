@@ -105,6 +105,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --without-science  Skip K-Dense scientific skills"
             echo "  --with-bio         Include ClawBio bioinformatics skills (default)"
             echo "  --without-bio      Skip ClawBio bioinformatics skills"
+            echo "  --only TARGET      Run only one component (skills|ollama|claude|openclaw|codex|pi|copilot|beads)"
             exit 0
             ;;
         *) shift ;;
@@ -436,8 +437,15 @@ if should_run "copilot"; then
 fi
 
 # =============================================================================
+# Step 7: Beads integration (bd CLI + beads-mcp + bd init)
 # =============================================================================
-# Step 5: Cleanup stale/invalid skills from previous installs
+if should_run "beads"; then
+    section "Beads"
+    bash "$REPO_DIR/scripts/setup-beads.sh" && success "Beads configured" || warn "Beads setup skipped (non-fatal)"
+fi
+
+# =============================================================================
+# Step 8: Cleanup stale/invalid skills from previous installs
 # =============================================================================
 if [ -f "$REPO_DIR/scripts/cleanup-invalid-skills.sh" ]; then
     log "Cleaning up invalid skills from previous installs..."

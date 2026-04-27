@@ -130,15 +130,17 @@ ollama launch copilot     # Copilot CLI + MCP servers
 
 | Component | What it configures |
 |-----------|-------------------|
-| **Claude Code MCP** | Adds 8 auto-configured servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer, codesight, skillgraph |
+| **Claude Code MCP** | Adds 9 auto-configured servers to `~/.claude.json`: memory, sequential-thinking, context7, playwright, google-docs-editor, token-optimizer, codesight, skillgraph, beads |
 | **OpenClaw** | Enables web tools + Ollama plugin in `~/.openclaw/openclaw.json` |
 | **Pi** | Sets Ollama as provider + installs `pi-subagents` package |
 | **Codex** | Configures `ollama-launch` provider + `danger-full-access` sandbox in `~/.codex/config.toml` |
-| **Copilot CLI** | Configures MCP servers in `~/.copilot/mcp-config.json` (run `scripts/setup-copilot.sh` to apply) |
-| **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default for all harnesses) |
+| **Copilot CLI** | Configures MCP servers (including beads) in `~/.copilot/mcp-config.json` |
+| **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
 | **Claude Code skills** | Copies ECC SKILL.md files to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
-| **ECC Skills cache** | Combined skills cache at `~/.claude/skills-cache/combined-skills.txt` for system prompt injection |
+| **Lean skills cache** | Personal learned skills at `~/.claude/skills-cache/lean-skills.txt` — injected at session start (~1-2K tokens). Full library cache (`combined-skills.txt`) kept for reference but never injected — Claude's 200K window means 1.4M tokens would crash every session |
+| **Beads** | `bd` CLI + `beads-mcp` MCP server — cross-session work item tracking. `bd prime` gives AI-optimised project context at session start |
+| **Learning pipeline scripts** | Copies `sync-learned-skills.sh`, `extract-conversation-skills.py`, `safe-install.sh` to `~/.claude/scripts/` so `learn-sync`/`learn-stats`/`learn-prune` aliases work from any directory |
 
 ---
 
@@ -159,28 +161,31 @@ ai-skillweave/
 ├── configs/                      ← Portable config templates
 │   ├── claude-mcp-servers.json   ← MCP servers for Claude Code CLI
 │   ├── claude-desktop-mcp-servers.json  ← MCP servers for Claude Desktop GUI
-│   ├── global-claude-md.md       ← Global CLAUDE.md template (MCP rules + conciseness)
+│   ├── copilot-mcp-config.json   ← MCP servers for Copilot CLI
+│   ├── global-claude-md.md       ← Global CLAUDE.md template (MCP rules + beads workflow + conciseness)
 │   ├── openclaw.json             ← OpenClaw config (web tools enabled)
 │   ├── codex-config.toml         ← Codex ollama-launch provider config
 │   ├── pi-settings.json          ← Pi agent settings
 │   ├── ollama-integrations.json  ← Ollama integration→model mapping
-│   └── zshrc-skills-block.sh     ← Shell skills layer block
+│   └── zshrc-skills-block.sh     ← Shell skills layer block (reference/manual use)
 │
 ├── scripts/                      ← Individual setup scripts
 │   ├── setup-mcp.sh              ← Inject MCP into ~/.claude.json (CLI)
 │   ├── setup-claude-md.sh        ← Install global CLAUDE.md (MCP rules + conciseness)
 │   ├── setup-hooks.sh            ← Install PreToolUse hook (codesight-redirect)
 │   ├── setup-learning-hook.sh    ← Install UserPromptSubmit hook (BMO learning capture)
+│   ├── setup-beads.sh            ← Install beads CLI + beads-mcp + bd init (auto-installs Homebrew if needed)
 │   ├── consolidate-learnings.py  ← Consolidate captured events into SKILL.md files
 │   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
 │   ├── build-desktop-skills.sh   ← Package .skill files for Desktop upload
 │   ├── setup-openclaw.sh         ← Apply OpenClaw config
 │   ├── setup-codex.sh            ← Apply Codex config
 │   ├── setup-pi.sh               ← Apply Pi settings
+│   ├── setup-copilot.sh          ← Apply Copilot CLI MCP config
 │   ├── setup-ollama-config.sh    ← Apply Ollama integration→model mapping
 │   ├── update-ecc.sh             ← Pull latest ECC + rebuild cache + learn-sync + re-sync harnesses
 │   ├── disable-zscaler.sh        ← Disable Zscaler proxy
-│   └── verify.sh                 ← Health check all components
+│   └── verify.sh                 ← Health check all components (beads, lean-skills, all harnesses)
 │
 ├── docs/
 │   ├── AUDIT.md                  ← MCP/subagent audit (what was fixed + why)
@@ -334,8 +339,7 @@ sudo dnf install python3
 ./install.sh --only pi
 ./install.sh --only codex
 ./install.sh --only copilot
-./install.sh --only pi
-./install.sh --only codex
+./install.sh --only beads
 
 # Skip ECC skills installation (faster, if skills already installed)
 ./install.sh --skip-skills
@@ -366,6 +370,7 @@ sudo dnf install python3
 | `token-optimizer` | 95%+ context reduction via deduplication — saves Opus tokens |
 | `codesight` | Maps codebase routes, schema, components, dependencies — AI context for any project |
 | `skillgraph` | Bioinformatics pipeline skills + knowledge graph via MCP — variant analysis, drug discovery, single-cell, 15+ databases |
+| `beads` | Cross-session work item tracking — `bd prime` gives AI-optimised context at session start (injected after `setup-beads.sh` confirms `beads-mcp` is installed) |
 
 **No tokens or API keys needed for any of the above.** `install.sh` applies them automatically on a new machine.
 
@@ -423,7 +428,7 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 
 | Harness | Skills | How they load |
 |---------|--------|--------------|
-| `claude` / `ollama launch claude` | **~450 native** + combined cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + full cache via `--append-system-prompt-file` + MCP servers |
+| `claude` / `ollama launch claude` | **~450 native** + lean skills cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + personal learned skills via `lean-skills.txt` (~1-2K tokens, via `--append-system-prompt-file`) + MCP servers |
 | `ollama launch openclaw` | **~450 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
 | `ollama launch pi` | **~450 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
 | `ollama launch codex` | **~450 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
@@ -572,31 +577,42 @@ To update ClawBio bioinformatics skills, re-run with `--with-bio`:
 
 ---
 
+## Context Window & Skills Injection
+
+### Why Claude was hitting "context limit reached"
+
+The original installer injected the full combined skills cache (`combined-skills.txt`, ~5.5MB ≈ **1.375M tokens**) into every Claude session via `--append-system-prompt-file`. Claude Sonnet 4.6 and Opus 4.7 have a **200K token** context window — this means the skills injection alone was **6.9× the entire context budget**, triggering an explicit `context_length_exceeded` error from the Anthropic API on every single session.
+
+Ollama models (Kimi, Qwen, etc.) silently truncate prompts to their `num_ctx` limit instead of erroring — which is why `ollama launch kimi` seemed to "work" while `ollama launch claude` kept failing.
+
+### The fix: lean-skills injection
+
+The installer now injects **only your personal learned skills** (`lean-skills.txt`) at session start — typically **1–2K tokens** (under 1% of the context window). The full combined cache is still built and stored at `~/.claude/skills-cache/combined-skills.txt` for reference and local search, but is never injected automatically.
+
+| File | Size | Tokens | Used for |
+|------|------|--------|---------|
+| `lean-skills.txt` | ~6-50KB | ~1.5–12K | Injected into every Claude session via `--append-system-prompt-file` |
+| `combined-skills.txt` | ~5.5MB | ~1.375M | Reference only — local search, update-ecc.sh, never auto-injected |
+
+The ~450 ECC/K-Dense/ClawBio SKILL.md files in `~/.claude/skills/` are loaded natively by Claude Code via its built-in `/skills` feature — no injection overhead, loaded on-demand, no context window impact.
+
+### Prompt caching (still active)
+
+Even with lean injection, Claude Code's prompt caching is still configured via `tengu_system_prompt_global_cache: true` in `~/.claude.json` — the lean block is cached after session 1 and reused across sessions.
+
+---
+
 ## Token Efficiency — Skills Injection + Prompt Caching
 
-All on-disk skills (~5.1MB / ~146K lines in combined cache) are injected into every `claude` session via `--append-system-prompt-file`. With ECC (184) + K-Dense (134) + ClawBio (56) + Anthropic (17) + Codex (44) = ~~450 skill dirs. This sounds expensive, but Claude Code's **prompt caching** makes it economical:
+With `lean-skills.txt` injection, per-session context overhead is minimal. Prompt caching keeps it economical even for heavy users:
 
-### How caching works
-
-Claude Code's prompt caching means the skills block is billed at cache-read rates after the first session each day (assuming the file hasn't changed).
-
-| Event | Rough cost (Sonnet 4.6 pricing) |
-|-------|---------------------|
-| Session 1 (cache miss) | Full input price for skills tokens |
+| Event | Cost |
+|-------|------|
+| Session 1 (cache miss) | Full input price for lean-skills tokens (~1-2K tokens) |
 | Session 2+ same day (cache hit) | ~90% discount on cached tokens |
 | Each conversation turn | Only new tokens in the exchange |
 
 > **Note:** Exact costs depend on your plan and model. Check [Anthropic's pricing page](https://docs.anthropic.com/en/docs/about-claude/pricing) for current rates.
-
-### What's already enabled
-
-`setup-mcp.sh` sets `tengu_system_prompt_global_cache: true` in `~/.claude.json`. This persists the cache **across sessions** (not just within one session), so the system prompt (skills injection) is reused from cache as long as the file content doesn't change.
-
-Running `./install.sh` on a new machine configures this automatically.
-
-### Why full injection beats selective injection
-
-Selective/on-demand loading requires the user to know which skills to activate. Full injection means Claude automatically applies relevant skills (TDD when writing tests, security review when touching auth, etc.) **without any explicit invocation** — which is the whole point.
 
 ---
 
@@ -607,7 +623,7 @@ Three layers ensure Claude actually uses MCP tools instead of raw file scanning:
 | Layer | Mechanism | Strength |
 | ----- | --------- | -------- |
 | `~/.claude/CLAUDE.md` | Global instructions loaded every session | Soft — can be ignored |
-| Skills cache preamble | Injected at top of `combined-skills.txt` | Soft — reinforces CLAUDE.md |
+| Lean skills preamble | Short directive injected at top of `lean-skills.txt` | Soft — reinforces CLAUDE.md |
 | `hooks/codesight-redirect.sh` | PreToolUse hook blocks broad Glob/Grep | **Hard — actually stops the call** |
 
 ### How the hook works
@@ -809,10 +825,55 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 |---------|----------------|-------------------|
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| MCP servers | 8 auto + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | ~~450 files via `--append-system-prompt-file` | 88 + personal + K-Dense via Project instructions |
+| MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
+| Skills injection | ~450 files via native `/skills` + lean cache (~1-2K tokens) | 88 + personal + K-Dense via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
+
+---
+
+## Beads Integration
+
+> **Powered by [beads](https://github.com/gastownhall/beads)** — AI-native cross-session work item tracking. Works with every harness (Claude Code, Codex, Copilot, OpenClaw, Pi) via MCP.
+
+### What beads does
+
+Beads lets you create, track, and share work items across AI coding sessions. Unlike session memory (which is per-harness), beads items persist in your project via `AGENTS.md` — a harness-agnostic file every AI tool reads.
+
+| Command | What it does |
+|---------|-------------|
+| `bd prime` | Gives Claude an AI-optimised context dump of all open work items — run at session start |
+| `bd ready` | List items ready to work on |
+| `bd create "task"` | Create a new work item |
+| `bd update <id> "status"` | Update an item's status |
+| `bd close <id>` | Mark an item complete |
+
+### Installation
+
+`scripts/setup-beads.sh` is called automatically by `install.sh` (Step 7). It:
+
+1. Checks for Homebrew — installs it if missing and stdin is a TTY (interactive only; CI/non-interactive installs skip if brew absent)
+2. Installs `beads` via `brew install beads` (macOS) or the official curl script (Linux)
+3. Installs `beads-mcp` via `uv tool install beads-mcp` (with `pip3 install --user beads-mcp` fallback)
+4. Injects the `beads` MCP entry into `~/.claude.json` and `~/.copilot/mcp-config.json` (only after confirming beads-mcp is installed; skips if already present)
+5. Runs `bd init --quiet --stealth` to initialise beads in the current repo
+
+```bash
+# Run just beads setup
+./install.sh --only beads
+
+# Or standalone
+scripts/setup-beads.sh
+scripts/setup-beads.sh --force    # overwrite existing beads MCP entry
+```
+
+### Stealth mode
+
+`--stealth` means `.beads/` is kept local (in `.gitignore`) — your beads items don't get committed to the project repo. `AGENTS.md` is still updated by `bd init` and is safe to commit.
+
+### Harness-agnostic design
+
+The MCP server (`beads-mcp`) makes beads available in any harness that loads `~/.claude.json` (Claude Code, Copilot) or `~/.copilot/mcp-config.json`. For OpenClaw, Pi, and Codex, `bd prime` output can be pasted directly — the `AGENTS.md` file is what matters for cross-session persistence.
 
 ---
 
