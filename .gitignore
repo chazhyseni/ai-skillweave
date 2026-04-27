@@ -32,6 +32,9 @@ __pycache__/
 *.pyc
 *.pyo
 .Python
+
+# Copilot session artifacts (large, temporary)
+copilot-session-*.md
 configs/desktop-skills/
 .cursorrules
 shared-learnings/
