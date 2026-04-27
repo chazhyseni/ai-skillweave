@@ -211,7 +211,8 @@ else
     else
         log "Initialising beads workspace (stealth mode)..."
         cd "$REPO_DIR"
-        bd init --quiet --stealth 2>/dev/null && success "Beads workspace initialised (.beads/)" || warn "bd init failed — run 'bd init' manually in the repo"
+        # Pipe "N" to answer "Contributing to someone else's repo? [y/N]" with default N
+        printf 'N\n' | bd init --quiet --stealth 2>/dev/null && success "Beads workspace initialised (.beads/)" || warn "bd init failed — run 'bd init' manually in the repo"
     fi
 fi
 
