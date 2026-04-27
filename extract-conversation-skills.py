@@ -55,66 +55,40 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =============================================================================
 
 def _ensure_deps(verbose: bool = False):
-    """Ensure sentence-transformers and scikit-learn are available.
+    """Ensure scikit-learn and numpy are available.
     
-    Catches both ImportError (missing package) and other exceptions
-    (version conflicts, incompatible transitive deps). For conflicts,
-    tries upgrade; for missing packages, tries install. Falls back to
-    Jaccard clustering if dependencies cannot be resolved.
+    sentence-transformers is intentionally NOT checked here — importing it
+    can crash the Python process on systems with abseil-cpp/pyarrow version
+    conflicts (SIGABRT, not catchable via except Exception). It is imported
+    lazily inside _cluster_by_similarity with a try/except that falls back
+    to Jaccard clustering if unavailable.
     """
     required = {
-        "sentence-transformers": "sentence-transformers>=3.0.0",
         "scikit-learn": "scikit-learn>=1.5.0",
         "numpy": "numpy>=1.26.0",
     }
     missing = []
-    broken = []
     for module, pkg in required.items():
         try:
             __import__(module.replace("-", "_"))
         except ImportError:
             missing.append(pkg)
-        except Exception as e:
-            # Dependency installed but broken (e.g., pyarrow/datasets version conflict)
-            broken.append((pkg, str(e)[:50]))
     
-    if missing or broken:
+    if missing:
+        if verbose:
+            print(f"  [DEPS] Installing: {', '.join(missing)}...")
         import subprocess, sys
         in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
-        
-        # Try to install missing packages
-        if missing:
-            if verbose:
-                print(f"  [DEPS] Installing: {', '.join(missing)}...")
-            cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + missing
-            if not in_venv:
-                cmd.append("--user")
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                print(f"  [WARN] Failed to auto-install dependencies: {result.stderr[:200]}")
-                print(f"  [WARN] Please run: pip install {' '.join(missing)}")
-        
-        # Try to fix broken packages by upgrading them
-        if broken:
-            if verbose:
-                print(f"  [DEPS] Fixing broken dependencies: {[p[0] for p in broken]}...")
-            # Upgrade broken packages (usually transitive dependency conflicts)
-            broken_pkgs = [p[0].split()[0] for p in broken]  # Extract package name
-            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--quiet"] + broken_pkgs
-            if not in_venv:
-                cmd.append("--user")
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                if verbose:
-                    print(f"  [DEPS] Fixed: {', '.join(broken_pkgs)}")
-            else:
-                print(f"  [WARN] Could not fix broken dependencies (likely version conflicts)")
-                print(f"  [WARN] Extraction will use Jaccard fallback (no sentence-transformers)")
-                return True  # Still allow script to continue with fallback
-        
-        if missing:
-            return False  # Cannot continue without missing core dependencies
-    
+        cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + missing
+        if not in_venv:
+            cmd.append("--user")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"  [WARN] Failed to auto-install dependencies: {result.stderr[:200]}")
+            print(f"  [WARN] Please run: pip install {' '.join(missing)}")
+            return False
+        if verbose:
+            print(f"  [DEPS] Installed: {', '.join(missing)}")
     return True
 
 
