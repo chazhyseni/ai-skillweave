@@ -40,46 +40,54 @@ def cluster_events(events):
         return {}
     
     # Try semantic clustering with sentence-transformers
+    # Safety: probe import in a subprocess first to avoid SIGABRT from abseil-cpp/pyarrow
+    # version conflicts (uncatchable in Python).
     if len(events) >= 5:
-        try:
-            from sentence_transformers import SentenceTransformer
-            import numpy as np
-            
-            texts = [e.get("message", "") for e in events]
-            encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            embeddings = encoder.encode(texts, show_progress_bar=False)
-            
-            # Normalize
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            norms[norms == 0] = 1
-            embeddings = embeddings / norms
-            
-            clusters = []
-            used = set()
-            for i in range(len(events)):
-                if i in used:
-                    continue
-                cluster = [events[i]]
-                used.add(i)
-                for j in range(i + 1, len(events)):
-                    if j in used:
+        import subprocess, sys
+        probe = subprocess.run(
+            [sys.executable, "-c", "from sentence_transformers import SentenceTransformer"],
+            capture_output=True, timeout=10
+        )
+        if probe.returncode == 0:
+            try:
+                from sentence_transformers import SentenceTransformer
+                import numpy as np
+                
+                texts = [e.get("message", "") for e in events]
+                encoder = SentenceTransformer('all-MiniLM-L6-v2')
+                embeddings = encoder.encode(texts, show_progress_bar=False)
+                
+                # Normalize
+                norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+                norms[norms == 0] = 1
+                embeddings = embeddings / norms
+                
+                clusters = []
+                used = set()
+                for i in range(len(events)):
+                    if i in used:
                         continue
-                    sim = float(np.dot(embeddings[i], embeddings[j]))
-                    if sim >= 0.72:
-                        cluster.append(events[j])
-                        used.add(j)
-                # Cluster key: type + first 3 words of first event
-                first_msg = events[i].get("message", "")
-                words = re.findall(r"\b\w+\b", first_msg.lower())
-                key_words = [w for w in words[:3] if len(w) > 3]
-                cluster_key = f"{events[i].get('type', 'unknown')}_{'-'.join(key_words) or 'general'}"
-                clusters.append((cluster_key, cluster))
-            
-            return dict(clusters)
-        except ImportError:
-            pass  # Fall through to keyword-based clustering
-        except Exception:
-            pass  # Fall through on any error
+                    cluster = [events[i]]
+                    used.add(i)
+                    for j in range(i + 1, len(events)):
+                        if j in used:
+                            continue
+                        sim = float(np.dot(embeddings[i], embeddings[j]))
+                        if sim >= 0.72:
+                            cluster.append(events[j])
+                            used.add(j)
+                    # Cluster key: type + first 3 words of first event
+                    first_msg = events[i].get("message", "")
+                    words = re.findall(r"\b\w+\b", first_msg.lower())
+                    key_words = [w for w in words[:3] if len(w) > 3]
+                    cluster_key = f"{events[i].get('type', 'unknown')}_{'-'.join(key_words) or 'general'}"
+                    clusters.append((cluster_key, cluster))
+                
+                return dict(clusters)
+            except ImportError:
+                pass  # Fall through to keyword-based clustering
+            except Exception:
+                pass  # Fall through on any error
     
     # Fallback: improved keyword-based clustering with Jaccard similarity
     stop_words = {

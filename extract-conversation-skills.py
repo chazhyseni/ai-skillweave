@@ -850,78 +850,99 @@ class Learning:
         
         Uses sklearn AgglomerativeClustering on normalized embeddings for robust,
         deterministic clusters. Falls back to Jaccard only if deps are missing.
+        
+        On systems with abseil-cpp/pyarrow version conflicts, importing
+        sentence-transformers can cause SIGABRT (uncatchable in Python). We
+        run the ENTIRE embedding pipeline in a subprocess so the parent survives
+        any C++ library crashes and falls back to Jaccard.
         """
-        # Primary: sentence-transformers + AgglomerativeClustering
+        import subprocess, sys, tempfile, json, os
+        
+        if self.verbose:
+            print(f"  [CLUSTER] Attempting embedding-based clustering for {len(corrections)} corrections...")
+        
+        # Build a temp script that does the embedding + clustering in isolation
+        texts = [c.raw_text for c in corrections]
+        script = '''
+import sys, json
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+import numpy as np
+
+texts = json.loads(sys.argv[1])
+threshold = float(sys.argv[2])
+verbose = sys.argv[3] == "1"
+
+if len(texts) == 1:
+    print(json.dumps([[0]]))
+    sys.exit(0)
+
+encoder = SentenceTransformer('all-MiniLM-L6-v2')
+embeddings = encoder.encode(texts, show_progress_bar=False)
+
+norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+norms[norms == 0] = 1
+embeddings = embeddings / norms
+
+distance_threshold = max(0.15, 1.0 - threshold)
+clustering = AgglomerativeClustering(
+    n_clusters=None,
+    distance_threshold=distance_threshold,
+    metric="cosine",
+    linkage="average",
+)
+labels = clustering.fit_predict(embeddings)
+
+# Group indices by label
+from collections import defaultdict
+clusters_dict = defaultdict(list)
+for idx, label in enumerate(labels):
+    clusters_dict[int(label)].append(idx)
+clusters = list(clusters_dict.values())
+
+if verbose:
+    sizes = [len(c) for c in clusters]
+    print(f"[CLUSTER-OK] {len(clusters)} clusters (sizes: {sizes}, threshold={threshold})", file=sys.stderr)
+
+print(json.dumps(clusters))
+'''
         try:
-            from sentence_transformers import SentenceTransformer
-            from sklearn.cluster import AgglomerativeClustering
-            import numpy as np
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(script)
+                tmp_script = f.name
             
-            if self.verbose:
-                print(f"  [CLUSTER] Embedding {len(corrections)} corrections with MiniLM...")
-            
-            # Lazy-load model (~80MB, CPU-friendly)
-            if not hasattr(self, '_encoder'):
-                self._encoder = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            texts = [c.raw_text for c in corrections]
-            embeddings = self._encoder.encode(texts, show_progress_bar=False)
-            
-            # Normalize for cosine similarity
-            norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-            norms[norms == 0] = 1
-            embeddings = embeddings / norms
-            
-            # Map Jaccard threshold to cosine distance
-            # Jaccard 0.5 ≈ cosine 0.72 similarity → cosine distance 0.28
-            distance_threshold = max(0.15, 1.0 - threshold)
-            
-            if len(corrections) == 1:
-                return [[corrections[0]]]
-            
-            # Agglomerative clustering with cosine affinity
-            clustering = AgglomerativeClustering(
-                n_clusters=None,
-                distance_threshold=distance_threshold,
-                metric="cosine",
-                linkage="average",
+            result = subprocess.run(
+                [sys.executable, tmp_script, json.dumps(texts), str(threshold), "1" if self.verbose else "0"],
+                capture_output=True, text=True, timeout=120
             )
-            labels = clustering.fit_predict(embeddings)
+            os.unlink(tmp_script)
             
-            # Group corrections by cluster label
-            clusters_dict: Dict[int, List[RawCorrection]] = defaultdict(list)
-            for idx, label in enumerate(labels):
-                clusters_dict[label].append(corrections[idx])
-            
-            clusters = list(clusters_dict.values())
-            
-            # Compute cluster coherence for quality tracking
-            for cluster in clusters:
-                if len(cluster) >= 3:
-                    idxs = [corrections.index(c) for c in cluster]
-                    cluster_embs = embeddings[idxs]
-                    # Average pairwise cosine similarity
-                    sims = np.dot(cluster_embs, cluster_embs.T)
-                    # Upper triangle mean (excluding diagonal)
-                    mask = np.triu(np.ones_like(sims), k=1).astype(bool)
-                    avg_sim = float(np.mean(sims[mask])) if mask.any() else 1.0
-                    for c in cluster:
-                        c._coherence = avg_sim  # type: ignore
-            
-            if self.verbose:
-                sizes = [len(c) for c in clusters]
-                print(f"  [CLUSTER] {len(clusters)} clusters (sizes: {sizes}, threshold={threshold})")
-            
-            return clusters
-            
-        except ImportError:
-            if self.verbose:
-                print(f"  [CLUSTER] sentence-transformers/sklearn not available, using Jaccard fallback")
+            if result.returncode == 0:
+                cluster_indices = json.loads(result.stdout.strip())
+                clusters = []
+                for idxs in cluster_indices:
+                    cluster = [corrections[i] for i in idxs]
+                    clusters.append(cluster)
+                if self.verbose:
+                    sizes = [len(c) for c in clusters]
+                    print(f"  [CLUSTER] {len(clusters)} clusters from embedding (sizes: {sizes})")
+                return clusters
+            else:
+                if self.verbose:
+                    err = result.stderr.strip()[:200]
+                    print(f"  [CLUSTER] Embedding subprocess failed ({result.returncode}): {err}")
         except Exception as e:
             if self.verbose:
-                print(f"  [CLUSTER] Embedding clustering failed ({type(e).__name__}), using Jaccard fallback")
+                print(f"  [CLUSTER] Embedding subprocess error ({type(e).__name__}): {e}")
+        finally:
+            try:
+                os.unlink(tmp_script)
+            except Exception:
+                pass
         
         # Fallback: Jaccard word overlap
+        if self.verbose:
+            print(f"  [CLUSTER] Using Jaccard fallback")
         clusters: List[List[RawCorrection]] = []
         used = set()
         for i, c1 in enumerate(corrections):
