@@ -193,20 +193,16 @@ install_ecc_skills() {
 
     if [ -d "$ECC_DIR" ]; then
         warn "Existing ECC installation found: $ECC_DIR"
-        # If stdin is a terminal, prompt interactively; otherwise keep existing
+        # If stdin is a terminal, prompt interactively; otherwise default to overwrite
         if [ -t 0 ]; then
-            read -p "Overwrite? [y/N] " -n 1 -r
+            read -p "Overwrite? [Y/n] " -n 1 -r
             echo ""
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
                 success "Keeping existing ECC installation"
                 return 0
-            else
-                rm -rf "$ECC_DIR"
             fi
-        else
-            success "Non-interactive mode — keeping existing ECC installation"
-            return 0
         fi
+        rm -rf "$ECC_DIR"
     fi
 
     mkdir -p "$ECC_DIR"
@@ -295,18 +291,14 @@ install_science_skills() {
     if [ -d "$SCIENCE_DIR" ]; then
         warn "Existing scientific skills found: $SCIENCE_DIR"
         if [ -t 0 ]; then
-            read -p "Overwrite? [y/N] " -n 1 -r
+            read -p "Overwrite? [Y/n] " -n 1 -r
             echo ""
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
                 success "Keeping existing scientific skills"
                 return 0
-            else
-                rm -rf "$SCIENCE_DIR"
             fi
-        else
-            success "Non-interactive mode — keeping existing scientific skills"
-            return 0
         fi
+        rm -rf "$SCIENCE_DIR"
     fi
 
     mkdir -p "$SCIENCE_DIR"
@@ -339,18 +331,14 @@ install_bio_skills() {
     if [ -d "$CLAWBIO_DIR" ]; then
         warn "Existing ClawBio skills found: $CLAWBIO_DIR"
         if [ -t 0 ]; then
-            read -p "Overwrite? [y/N] " -n 1 -r
+            read -p "Overwrite? [Y/n] " -n 1 -r
             echo ""
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
                 success "Keeping existing ClawBio skills"
                 return 0
-            else
-                rm -rf "$CLAWBIO_DIR"
             fi
-        else
-            success "Non-interactive mode — keeping existing ClawBio skills"
-            return 0
         fi
+        rm -rf "$CLAWBIO_DIR"
     fi
 
     mkdir -p "$CLAWBIO_DIR"
