@@ -1802,16 +1802,32 @@ class Pipeline:
         return sources
 
     def find_new_files(self, harness: str, last_extracted: float) -> List[Tuple[str, Path]]:
-        """Filter input sources to only files modified since last_extracted timestamp."""
+        """Filter input sources to those containing files modified since last_extracted.
+
+        Checks individual .jsonl file mtimes rather than directory mtime so that
+        new session files added to existing project directories are detected.
+        A source directory is included if ANY file within it is newer.
+        """
         all_sources = self._find_input_sources(harness)
         new_sources = []
         for name, path in all_sources:
             try:
-                mtime = path.stat().st_mtime
-                if mtime > last_extracted:
-                    new_sources.append((name, path))
-                elif self.verbose:
-                    print(f"  [SKIP] {path} — older than last extraction ({datetime.fromtimestamp(last_extracted)})")
+                if path.is_file():
+                    if path.stat().st_mtime > last_extracted:
+                        new_sources.append((name, path))
+                    elif self.verbose:
+                        print(f"  [SKIP] {path} — older than last extraction")
+                elif path.is_dir():
+                    # Check if any .jsonl file within the dir tree is newer
+                    has_new = any(
+                        f.stat().st_mtime > last_extracted
+                        for f in path.rglob("*.jsonl")
+                        if f.is_file()
+                    )
+                    if has_new:
+                        new_sources.append((name, path))
+                    elif self.verbose:
+                        print(f"  [SKIP] {path} — no new .jsonl files since last extraction ({datetime.fromtimestamp(last_extracted)})")
             except OSError:
                 continue
         return new_sources

@@ -337,16 +337,24 @@ anthropic_skills_dir = os.path.join(curated_dir, "anthropic-official", "skills")
 codex_curated_dir = os.path.join(curated_dir, "openai-codex", "skills")
 science_dir = os.path.join(home, ".claude-scientific-skills", "scientific-skills")
 clawbio_dir = os.path.join(home, ".claude-clawbio-skills", "skills")
+# GPTomics/bioSkills are installed directly into ~/.claude/skills/<category>/<skill>/SKILL.md
+# They live at depth-3 (category/skill/SKILL.md), unlike depth-2 skills (skill/SKILL.md)
+bioskills_dir = os.path.join(home, ".claude", "skills")
 
 # Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated + K-Dense
-def collect_skill_dirs(base_dir):
+def collect_skill_dirs(base_dir, max_depth=None):
     """Return {skill_name: skill_dir_path} for all dirs containing SKILL.md (any depth)."""
     result = {}
     if not os.path.isdir(base_dir):
         return result
+    base_depth = base_dir.rstrip(os.sep).count(os.sep)
     for dirpath, dirnames, filenames in os.walk(base_dir):
-        # Skip hidden directories (like .system, .git)
+        # Skip hidden directories (like .system, .git, .archive)
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        if max_depth is not None:
+            current_depth = dirpath.count(os.sep) - base_depth
+            if current_depth >= max_depth:
+                dirnames[:] = []
         if "SKILL.md" in filenames:
             skill_name = os.path.basename(dirpath)
             # Use full path as key when there's a collision (keep first found)
@@ -354,15 +362,42 @@ def collect_skill_dirs(base_dir):
                 result[skill_name] = dirpath
     return result
 
+def collect_bioskills(base_dir):
+    """Collect GPTomics/bioSkills from ~/.claude/skills/<category>/<skill>/SKILL.md.
+
+    bioSkills sit at depth-3 (category subdir → skill subdir → SKILL.md).
+    Excludes: depth-2 skills (ECC/native), learned/ dir, hidden dirs.
+    """
+    result = {}
+    if not os.path.isdir(base_dir):
+        return result
+    for category in os.listdir(base_dir):
+        if category.startswith(".") or category == "learned":
+            continue
+        cat_path = os.path.join(base_dir, category)
+        if not os.path.isdir(cat_path):
+            continue
+        for skill in os.listdir(cat_path):
+            if skill.startswith("."):
+                continue
+            skill_path = os.path.join(cat_path, skill)
+            skill_md = os.path.join(skill_path, "SKILL.md")
+            if os.path.isdir(skill_path) and os.path.exists(skill_md):
+                if skill not in result:
+                    result[skill] = skill_path
+    return result
+
 ecc_skills = collect_skill_dirs(ecc_dir)
 anthropic_skills = collect_skill_dirs(anthropic_skills_dir)
 codex_curated_skills = collect_skill_dirs(codex_curated_dir)
 science_skills = collect_skill_dirs(science_dir)
 clawbio_skills = collect_skill_dirs(clawbio_dir)
+bioskills = collect_bioskills(bioskills_dir)
 
-# Merge all sources (ECC has priority over curated on name conflicts)
+# Merge all sources (ECC has highest priority on name conflicts)
 all_skills = {}
 all_skills.update(codex_curated_skills)   # lowest priority
+all_skills.update(bioskills)              # bio skills (before clawbio/science/ecc)
 all_skills.update(anthropic_skills)       # medium-low priority
 all_skills.update(clawbio_skills)         # medium priority
 all_skills.update(science_skills)         # medium-high priority
@@ -491,7 +526,7 @@ if os.path.isdir(os.path.join(home, ".claude")):
     print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
 total = len(all_skills)
-print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")

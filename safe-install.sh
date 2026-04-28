@@ -1040,6 +1040,7 @@ show_usage() {
     CODEX_COUNT=0
     SCIENCE_COUNT=0
     BIO_COUNT=0
+    BIOSKILLS_COUNT=0
     if [ -d "$ECC_DIR/skills" ]; then
         ECC_COUNT=$(find "$ECC_DIR/skills" -maxdepth 2 -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
     fi
@@ -1055,7 +1056,16 @@ show_usage() {
     if [ -d "$CLAWBIO_DIR/skills" ]; then
         BIO_COUNT=$(find "$CLAWBIO_DIR/skills" -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
     fi
-    TOTAL_COUNT=$((ECC_COUNT + ANTHROPIC_COUNT + CODEX_COUNT + SCIENCE_COUNT + BIO_COUNT))
+    # GPTomics/bioSkills are installed directly into ~/.claude/skills/ (not a separate dir)
+    # Count by bio- prefix in skill names (installed by scripts/install-bioskills.sh)
+    if [ -d "$CLAUDE_DIR/skills" ]; then
+        BIOSKILLS_COUNT=$(find "$CLAUDE_DIR/skills" -mindepth 2 -maxdepth 3 -name 'SKILL.md' 2>/dev/null | \
+            xargs -I{} dirname {} 2>/dev/null | xargs -I{} basename {} 2>/dev/null | \
+            grep -cv "^learned$\|^bio-\|^\." 2>/dev/null || echo 0)
+        # Count skills in category subdirs (depth-3 = category/skill/SKILL.md)
+        BIOSKILLS_COUNT=$(find "$CLAUDE_DIR/skills" -mindepth 3 -maxdepth 3 -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    TOTAL_COUNT=$((ECC_COUNT + ANTHROPIC_COUNT + CODEX_COUNT + SCIENCE_COUNT + BIO_COUNT + BIOSKILLS_COUNT))
 
     # Determine which rc file to tell the user to source
     local reload_rc
@@ -1072,12 +1082,13 @@ show_usage() {
 ╚══════════════════════════════════════════════════════════╝
 
 Skills loaded:
-  - ECC skills:           $ECC_COUNT
-  - Anthropic skills:    $ANTHROPIC_COUNT
-  - Codex skills:        $CODEX_COUNT
-  - Scientific skills:    $SCIENCE_COUNT (K-Dense Agent Skills)
-  - Bioinformatics skills: $BIO_COUNT (ClawBio)
-  - Total:                $TOTAL_COUNT
+  - ECC skills:              $ECC_COUNT
+  - Anthropic skills:        $ANTHROPIC_COUNT
+  - Codex skills:            $CODEX_COUNT
+  - Scientific skills:       $SCIENCE_COUNT (K-Dense Agent Skills)
+  - Bioinformatics (ClawBio):$BIO_COUNT
+  - Bioinformatics (bioSkills):$BIOSKILLS_COUNT (GPTomics/bioSkills)
+  - Total:                   $TOTAL_COUNT
 
 Activate:  source $reload_rc   (or restart terminal)
 
