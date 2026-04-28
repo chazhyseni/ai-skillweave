@@ -1287,15 +1287,7 @@ class SkillWriter:
 
     def write_skills(self, groups: List[PatternGroup]) -> List[str]:
         written = []
-        
-        # Clean up old truncated files (< 60 chars = definitely truncated)
-        if not self.dry_run:
-            for old_file in self.output_dir.glob("when-*.md"):
-                if len(old_file.stem) < 60:
-                    old_file.unlink()
-                    if self.verbose:
-                        print(f"  [CLEANUP] Removed truncated: {old_file.name}")
-        
+
         for group in groups:
             skill = self._group_to_skill(group)
             content = self._render_skill_md(skill)
@@ -1314,6 +1306,22 @@ class SkillWriter:
                 written.append(str(fp))
                 if self.verbose:
                     print(f"  [WRITE] {skill.name}.md")
+
+        # Remove stale skills from previous runs — output dir should always
+        # reflect exactly the current run's results (Stage 2 re-evaluates the
+        # full corrections cache, so anything not written here no longer qualifies).
+        if not self.dry_run and written:
+            current_names = {Path(fp).name for fp in written}
+            removed = 0
+            for old_file in self.output_dir.glob("*.md"):
+                if old_file.name not in current_names:
+                    old_file.unlink()
+                    removed += 1
+                    if self.verbose:
+                        print(f"  [CLEANUP] Removed stale: {old_file.name}")
+            if removed:
+                print(f"  [CLEANUP] Removed {removed} stale skill(s) from previous runs")
+
         return written
 
     def _group_to_skill(self, group: PatternGroup) -> SkillOutput:
