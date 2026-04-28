@@ -55,7 +55,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =============================================================================
 
 def _ensure_deps(verbose: bool = False):
-    """Ensure scikit-learn, numpy, and scikit-llm are available.
+    """Ensure scikit-learn and numpy are available.
 
     sentence-transformers is intentionally NOT checked here — importing it
     can crash the Python process on systems with abseil-cpp/pyarrow version
