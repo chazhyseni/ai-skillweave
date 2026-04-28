@@ -138,7 +138,8 @@ ollama launch copilot     # Copilot CLI + MCP servers
 | **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
 | **Claude Code skills** | Copies ECC SKILL.md files to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
-| **Lean skills cache** | Personal learned skills at `~/.claude/skills-cache/lean-skills.txt` — injected at session start (~1-2K tokens). Full library cache (`combined-skills.txt`) kept for reference but never injected — Claude's 200K window means 1.4M tokens would crash every session |
+| **Lean skills cache** | Personal learned skills at `~/.claude/skills-cache/lean-skills.txt` — name + one operating principle per skill (~1100 tokens total). Full library cache (`combined-skills.txt`) kept for reference but never injected — Claude's 200K window means 5MB would crash every session |
+| **bioSkills** | 438 bioinformatics skills from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) cloned into `~/.claude/skills/` — available on-demand via the Skill tool, NOT injected into every session. Covers variant-calling, single-cell, spatial-transcriptomics, phylogenetics, GWAS, ATAC-seq, CRISPR, and 57 other categories |
 | **Beads** | `bd` CLI + `beads-mcp` MCP server — cross-session work item tracking. `bd prime` gives AI-optimised project context at session start |
 | **Learning pipeline scripts** | Copies `sync-learned-skills.sh`, `extract-conversation-skills.py`, `safe-install.sh` to `~/.claude/scripts/` so `learn-sync`/`learn-stats`/`learn-prune` aliases work from any directory |
 
@@ -175,6 +176,7 @@ ai-skillweave/
 │   ├── setup-hooks.sh            ← Install PreToolUse hook (codesight-redirect)
 │   ├── setup-learning-hook.sh    ← Install UserPromptSubmit hook (BMO learning capture)
 │   ├── setup-beads.sh            ← Install beads CLI + beads-mcp + bd init (auto-installs Homebrew if needed)
+│   ├── install-bioskills.sh      ← Clone GPTomics/bioSkills → ~/.claude/skills/ (438 on-demand bioinformatics skills)
 │   ├── consolidate-learning.py   ← Consolidate captured events into SKILL.md files
 │   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
 │   ├── build-desktop-skills.sh   ← Package .skill files for Desktop upload
@@ -581,44 +583,53 @@ To update ClawBio bioinformatics skills, re-run with `--with-bio`:
 
 ---
 
-## Context Window & Skills Injection
+## How skills stay available without burning tokens
 
-**What changed:** Only your personal learned skills (`lean-skills.txt`, ~1–2K tokens) are injected at session start. The full combined cache (`combined-skills.txt`, ~5.5MB) is still built for reference and local search, but is never auto-injected.
+The key is **deferred loading**: skills are indexed (name only in system prompt, ~5 tokens each), not pre-loaded. Full content only loads when a skill is actually invoked.
 
-**Why:** The original installer injected the full cache (~1.375M tokens) into every Claude session. Claude's 200K context window was exceeded immediately. Ollama models silently truncated instead of erroring, which masked the problem.
+### The three layers
 
-**All skills are still available to all harnesses — nothing was removed:**
+| Layer | What's in context | Token cost |
+|-------|------------------|------------|
+| **Skill index** (always) | ~500 skill names in the available-skills list | ~2500 tokens, cached after first turn |
+| **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill | ~1100 tokens (was 5750 before v2.1) |
+| **Skill content** (on demand) | Full SKILL.md loaded when you invoke a skill | 0 tokens unless used |
 
-| Harness | How skills are loaded | All ~450 skills? |
+### Why this works
+
+```
+Session start:   [skill names only] ←→ "variant-calling/gatk-variant-calling"   ~5 tokens
+Skill invoked:   [full SKILL.md loaded] ←→ 200+ lines of code patterns          ~2000 tokens
+Session with no skills invoked: pay only for the index, not the content
+```
+
+**bioSkills (438 skills, ~100KB each):** Without deferred loading, installing these would add ~40MB to every session. With deferred loading, they cost ~0 tokens until invoked.
+
+### How skills load in each harness
+
+| Harness | How skills are loaded | All ~950 skills? |
 |---------|----------------------|-----------------|
-| Claude Code | Native `/skills` from `~/.claude/skills/` + `lean-skills.txt` injection | ✅ Yes |
+| Claude Code | Native deferred loading from `~/.claude/skills/` — content fetched on demand | ✅ Yes |
 | Copilot CLI | Native discovery from `~/.claude/skills/` | ✅ Yes |
 | Codex | Synced to `~/.codex/skills/` by `update-ecc.sh` | ✅ Yes |
 | Pi | Linked to `~/.pi/agent/skills/` | ✅ Yes |
 | OpenClaw | Copied to `~/.openclaw/workspace/skills/` | ✅ Yes |
+| `claude` CLI | lean-skills.txt (~1100 tokens) appended at launch | ✅ Learned skills |
 
-The `lean-skills.txt` change **only** affects what gets injected into Claude's system prompt at session start. Every skill is still present in `~/.claude/skills/` and synced to all harness directories.
+### lean-skills.txt (for `claude` CLI + ollama sessions)
 
-**Prompt caching:** Still active via `tengu_system_prompt_global_cache: true` in `~/.claude.json` — the lean block is cached after session 1.
+Injects a brief summary of your personal learned skills so the model knows they exist:
 
 | File | Size | Tokens | Used for |
 |------|------|--------|----------|
-| `lean-skills.txt` | ~6-50KB | ~1.5–12K | Injected at session start |
-| `combined-skills.txt` | ~5.5MB | ~1.375M | Reference / local search only |
+| `lean-skills.txt` | ~3KB | ~1100 | Injected via `--append-system-prompt-file` at session start |
+| `combined-skills.txt` | ~5.5MB | ~1.375M | Reference / local search only — never injected |
 
----
+**Prompt caching:** Active via `tengu_system_prompt_global_cache: true` in `~/.claude.json` — the system prompt (including skill index + lean-skills) is cached after session 1, costing ~90% less on subsequent turns.
 
-## Token Efficiency — Skills Injection + Prompt Caching
+### What ai-skillweave can't reduce
 
-With `lean-skills.txt` injection, per-session context overhead is minimal. Prompt caching keeps it economical even for heavy users:
-
-| Event | Cost |
-|-------|------|
-| Session 1 (cache miss) | Full input price for lean-skills tokens (~1-2K tokens) |
-| Session 2+ same day (cache hit) | ~90% discount on cached tokens |
-| Each conversation turn | Only new tokens in the exchange |
-
-> **Note:** Exact costs depend on your plan and model. Check [Anthropic's pricing page](https://docs.anthropic.com/en/docs/about-claude/pricing) for current rates.
+The Claude Code plugin ecosystem (MCP server instructions, deferred tools manifest) adds ~10–20K tokens to every session. This comes from the installed plugins and is not controlled by ai-skillweave. Prompt caching amortizes this cost; removing unused plugins reduces it permanently.
 
 ---
 

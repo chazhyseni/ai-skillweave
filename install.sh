@@ -456,17 +456,9 @@ if [ -f "$REPO_DIR/scripts/cleanup-invalid-skills.sh" ]; then
     bash "$REPO_DIR/scripts/cleanup-invalid-skills.sh" 2>/dev/null || warn "Skill cleanup had issues (non-fatal)"
 fi
 
-# =============================================================================
-# Step 9: bioSkills (optional — 438 bioinformatics skills, on-demand only)
-# =============================================================================
-if should_run "bioskills"; then
-    section "bioSkills (GPTomics/bioSkills)"
-    if git --version >/dev/null 2>&1; then
-        bash "$REPO_DIR/scripts/install-bioskills.sh" && success "bioSkills installed" || warn "bioSkills install skipped (non-fatal)"
-    else
-        warn "git not found — skipping bioSkills install"
-    fi
-fi
+# Note: bioSkills (GPTomics/bioSkills, 438 skills) are installed as part of
+# the skills layer above (safe-install.sh --with-bioskills). To install
+# standalone: scripts/install-bioskills.sh [--list | --categories=X | --update]
 
 # Done
 # =============================================================================
