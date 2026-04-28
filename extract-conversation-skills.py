@@ -63,13 +63,10 @@ def _ensure_deps(verbose: bool = False):
     lazily inside _cluster_by_similarity with a try/except that falls back
     to Jaccard clustering if unavailable.
 
-    scikit-llm is used for Stage 1 zero-shot classification via the local
-    Ollama OpenAI-compatible endpoint (localhost:11434/v1) — no cloud API key.
-    """
+"""
     required = {
         "scikit-learn": "scikit-learn>=1.5.0",
         "numpy": "numpy>=1.26.0",
-        "scikit-llm": "scikit-llm>=0.9.0",
     }
     missing = []
     for module, pkg in required.items():
@@ -427,43 +424,68 @@ class Ingestion:
             re.compile(r'\b(you\'re missing|you missed|you forgot)\b', re.IGNORECASE),
         ]
 
-    def _llm_classify_batch(self, utterances: List[str]) -> Dict[str, Optional[str]]:
-        """Batch-classify utterances with ZeroShotGPTClassifier via local Ollama.
+    # Maximum utterances to send to LLM — keeps Stage 1 fast on large histories
+    _LLM_BATCH_CAP = 400
+    _LLM_CHUNK_SIZE = 50   # utterances per single LLM call
 
-        Points scikit-llm at the Ollama OpenAI-compatible endpoint
-        (localhost:11434/v1) using qwen3.6:latest. Falls back to {} on any
-        error so the regex path remains the safety net.
+    def _llm_classify_batch(self, utterances: List[str]) -> Dict[str, Optional[str]]:
+        """Batch-classify utterances via chunked LLM calls (50 per call).
+
+        Sends _LLM_CHUNK_SIZE utterances per call as a numbered list and asks
+        the model for a comma-separated label list.  This is 50-100× faster
+        than scikit-llm's one-call-per-sample approach and works directly with
+        the existing _try_get_completion() Ollama routing.
+
+        Only the top _LLM_BATCH_CAP utterances (by partial regex signal) are
+        sent so Stage 1 stays under ~2 minutes on large conversation histories.
         """
         if not utterances:
             return {}
-        try:
-            from skllm.config import SKLLMConfig
-            from skllm.models.gpt.classification.zero_shot import ZeroShotGPTClassifier
 
-            SKLLMConfig.set_gpt_key("ollama")
-            SKLLMConfig.set_gpt_url("http://localhost:11434/v1")
+        # Deduplicate, cap total
+        unique = list(dict.fromkeys(utterances))[:self._LLM_BATCH_CAP]
+        if self.verbose:
+            print(f"  [LLM-CLASSIFY] {len(unique)} utterances → {(len(unique) + self._LLM_CHUNK_SIZE - 1) // self._LLM_CHUNK_SIZE} LLM calls (chunk={self._LLM_CHUNK_SIZE}) via {self.llm_model}")
 
-            labels = ["anti_pattern", "heuristic", "none"]
-            clf = ZeroShotGPTClassifier(model=self.llm_model)
-            clf.fit(None, labels)
+        result: Dict[str, Optional[str]] = {}
+        total_chunks = (len(unique) + self._LLM_CHUNK_SIZE - 1) // self._LLM_CHUNK_SIZE
 
-            # Deduplicate to avoid redundant LLM calls
-            unique = list(dict.fromkeys(utterances))
-            if self.verbose:
-                print(f"  [LLM-CLASSIFY] Batch classifying {len(unique)} utterances via {self.llm_model}...")
-            predictions = clf.predict(unique)
+        for chunk_i, start in enumerate(range(0, len(unique), self._LLM_CHUNK_SIZE)):
+            chunk = unique[start:start + self._LLM_CHUNK_SIZE]
+            prompt = (
+                "Classify each user message as one of: anti_pattern, heuristic, none.\n"
+                "anti_pattern = user correcting AI (don't do X, that's wrong, stop, etc.)\n"
+                "heuristic    = user stating a preference or best practice\n"
+                "none         = anything else\n\n"
+                "Messages:\n"
+                + "\n".join(f"{j+1}. {utt[:200]}" for j, utt in enumerate(chunk))
+                + "\n\nReply with ONLY a comma-separated list of labels in the same order.\n"
+                "Example for 3 messages: none,anti_pattern,heuristic\nLabels:"
+            )
+            try:
+                response = _try_get_completion(prompt, timeout=90, verbose=False)
+                if not response:
+                    continue
+                # Strip markdown fences / extra whitespace
+                response = response.strip().strip("`").strip()
+                labels = [lbl.strip().lower() for lbl in response.split(",")]
+                for j, utt in enumerate(chunk):
+                    if j < len(labels):
+                        lbl = labels[j]
+                        result[utt] = lbl if lbl in ("anti_pattern", "heuristic") else None
+            except Exception as e:
+                if self.verbose:
+                    print(f"  [LLM-CLASSIFY] Chunk {chunk_i+1}/{total_chunks} failed ({type(e).__name__}), skipping")
+                continue
 
-            result: Dict[str, Optional[str]] = {}
-            for text, pred in zip(unique, predictions):
-                result[text] = None if pred == "none" else pred
-            if self.verbose:
+            if self.verbose or (chunk_i + 1) % 5 == 0:
+                done = min(start + self._LLM_CHUNK_SIZE, len(unique))
                 hits = sum(1 for v in result.values() if v is not None)
-                print(f"  [LLM-CLASSIFY] {hits}/{len(unique)} classified as corrections")
-            return result
-        except Exception as e:
-            if self.verbose:
-                print(f"  [LLM-CLASSIFY] Failed ({type(e).__name__}: {e}), regex only")
-            return {}
+                print(f"  [LLM-CLASSIFY] {done}/{len(unique)} classified, {hits} corrections found")
+
+        total_hits = sum(1 for v in result.values() if v is not None)
+        print(f"  [LLM-CLASSIFY] Done: {total_hits}/{len(unique)} corrections from LLM")
+        return result
 
     def score_utterance(self, text: str, llm_lookup: Optional[Dict[str, Optional[str]]] = None) -> Tuple[Optional[str], float]:
         """Classify utterance and return (memory_type, confidence).
@@ -639,6 +661,9 @@ class Ingestion:
         rich correction that captures the full reasoning.
         """
         # --- Pass 1: LLM pre-classification of borderline utterances ---
+        # Only send utterances where regex found weak signal (0 < conf < 0.80).
+        # Pure noise (conf=0.0) and high-confidence regex hits (conf>=0.80) are
+        # skipped — this keeps the batch to a few hundred at most, not 18K+.
         llm_lookup: Dict[str, Optional[str]] = {}
         if self.use_llm:
             borderline: List[str] = []
@@ -648,15 +673,17 @@ class Ingestion:
                     continue
                 for utt in re.split(r"(?<=[.!?])\s+|\n{2,}", content):
                     utt = utt.strip()
-                    if len(utt) < 10:
+                    if len(utt) < 20 or len(utt) > 600:
                         continue
                     if any(p.search(utt) for p in SKIP_PATTERNS):
                         continue
-                    # Only send utterances regex is uncertain about to the LLM
                     _, conf = self.score_utterance(utt)
-                    if conf < 0.80:
+                    # Only LLM-classify utterances where regex has weak signal
+                    if 0.0 < conf < 0.80:
                         borderline.append(utt)
             if borderline:
+                if self.verbose:
+                    print(f"  [LLM-CLASSIFY] Pre-filter: {len(borderline)} borderline utterances (weak regex signal)")
                 llm_lookup = self._llm_classify_batch(borderline)
 
         # --- Pass 2: per-conversation extraction with multi-turn detection ---

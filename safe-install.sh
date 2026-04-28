@@ -164,7 +164,7 @@ command -v python3 >/dev/null 2>&1 || error "python3 is required but could not b
 # Pre-install Python dependencies for auto-learning pipeline
 log "Installing Python dependencies for skill extraction..."
 _install_python_deps() {
-    local pkgs="sentence-transformers>=3.0.0 scikit-learn>=1.5.0 scikit-llm>=0.9.0"
+    local pkgs="sentence-transformers>=3.0.0 scikit-learn>=1.5.0"
     local in_venv=""
     if python3 -c "import sys; sys.exit(0 if (sys.prefix != sys.base_prefix) else 1)" 2>/dev/null; then
         in_venv=1
@@ -191,7 +191,7 @@ _install_python_deps() {
         return 0
     fi
     warn "All pip install attempts failed (see errors above)"
-    warn "Try manually: python3 -m pip install sentence-transformers scikit-learn scikit-llm"
+    warn "Try manually: python3 -m pip install sentence-transformers scikit-learn"
     return 1
 }
 _install_python_deps || warn "Python deps missing — the learning pipeline will fail until fixed"
