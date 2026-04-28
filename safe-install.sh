@@ -54,6 +54,7 @@ WITH_CURATED=false
 CURATED_ONLY=false
 WITH_SCIENCE=true
 WITH_BIO=true
+WITH_BIOSKILLS=true
 WITH_LEARN=true
 FORCE_OVERWRITE=false
 
@@ -77,6 +78,12 @@ for arg in "$@"; do
             ;;
         --without-bio)
             WITH_BIO=false
+            ;;
+        --with-bioskills)
+            WITH_BIOSKILLS=true
+            ;;
+        --without-bioskills)
+            WITH_BIOSKILLS=false
             ;;
         --no-learn)
             WITH_LEARN=false
@@ -488,10 +495,32 @@ LOADER
 
     chmod +x "$SKILLS_CACHE_DIR/load-skills.sh"
     success "Loader created: $SKILLS_CACHE_DIR/load-skills.sh"
-    # Lean cache: personal learned skills only (injected into Anthropic Opus sessions)
+    # Lean cache: name + description only (injected into claude/ollama sessions)
+    # Strips all body content — ~20 tokens/skill instead of ~250 tokens/skill.
     if ls "$CLAUDE_DIR/skills/learned"/*.md >/dev/null 2>&1; then
-        cat "$CLAUDE_DIR/skills/learned"/*.md > "$SKILLS_CACHE_DIR/lean-skills.txt"
-        success "Lean cache created: $SKILLS_CACHE_DIR/lean-skills.txt (personal skills only — 98% fewer tokens)"
+        python3 - "$CLAUDE_DIR/skills/learned" "$SKILLS_CACHE_DIR/lean-skills.txt" << 'PYEOF'
+import sys, re, pathlib
+skills_dir = pathlib.Path(sys.argv[1])
+out_file = pathlib.Path(sys.argv[2])
+lines = ["# Learned Skills (name + operating principle only)\n"]
+for f in sorted(skills_dir.glob("*.md")):
+    if f.name.startswith(".") or f.name in ("SKILL.md",):
+        continue
+    text = f.read_text(errors="replace")
+    # Extract frontmatter fields
+    name = re.search(r'^name:\s*(.+)$', text, re.M)
+    desc = re.search(r'^description:\s*(.+)$', text, re.M)
+    # Extract first operating principle line
+    principle = re.search(r'^\d+\.\s+(.+)$', text, re.M)
+    if name and desc:
+        lines.append(f"- **{name.group(1).strip()}**: {desc.group(1).strip()}")
+        if principle:
+            lines.append(f"  → {principle.group(1).strip()}")
+        lines.append("")
+out_file.write_text("\n".join(lines))
+PYEOF
+        LEAN_TOKENS=$(python3 -c "t=open('$SKILLS_CACHE_DIR/lean-skills.txt').read(); print(len(t)//4,'approx tokens')" 2>/dev/null || echo "?")
+        success "Lean cache created: $SKILLS_CACHE_DIR/lean-skills.txt (~$LEAN_TOKENS injected per session)"
     else
         > "$SKILLS_CACHE_DIR/lean-skills.txt"
         warn "No learned skills found — lean cache is empty"
@@ -1084,6 +1113,32 @@ USAGE
 }
 
 # =============================================================================
+# Step 2d: Install GPTomics/bioSkills (438 on-demand bioinformatics skills)
+# =============================================================================
+
+install_bioskills() {
+    if [ "$WITH_BIOSKILLS" = false ]; then
+        log "Skipping GPTomics/bioSkills (use --with-bioskills to add)"
+        return 0
+    fi
+
+    log "Step 2d: Installing GPTomics/bioSkills (438 bioinformatics skills)..."
+    SCRIPT_DIR_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    INSTALLER="$SCRIPT_DIR_LOCAL/scripts/install-bioskills.sh"
+
+    if [ ! -f "$INSTALLER" ]; then
+        warn "install-bioskills.sh not found at $INSTALLER — skipping"
+        return 0
+    fi
+
+    if [ "$FORCE_OVERWRITE" = true ]; then
+        bash "$INSTALLER" --update 2>/dev/null || warn "bioSkills install had issues (non-fatal)"
+    else
+        bash "$INSTALLER" 2>/dev/null || warn "bioSkills install had issues (non-fatal)"
+    fi
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -1091,6 +1146,7 @@ install_ecc_skills
 install_curated_skills
 install_science_skills
 install_bio_skills
+install_bioskills
 create_loader
 link_native_skills
 setup_shell_integration || true

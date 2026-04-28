@@ -201,14 +201,31 @@ fi
 CACHE_SIZE=$(wc -c < "$COMBINED_FILE" | tr -d ' ')
 success "Cache rebuilt: $CACHE_SIZE bytes → $COMBINED_FILE"
 
-# Rebuild lean cache (personal learned skills only)
-# This is what _claude_with_skills injects into Anthropic Opus sessions.
-# ~6K tokens vs 289K tokens — 98% reduction for frontier model sessions.
+# Rebuild lean cache: name + operating principle only per skill (~20 tokens/skill)
+# This is what _claude_with_skills injects. Full content would be ~250 tokens/skill.
 LEAN_FILE="$SKILLS_CACHE_DIR/lean-skills.txt"
 if ls "$HOME/.claude/skills/learned"/*.md >/dev/null 2>&1; then
-    cat "$HOME/.claude/skills/learned"/*.md > "$LEAN_FILE"
+    python3 - "$HOME/.claude/skills/learned" "$LEAN_FILE" << 'PYEOF'
+import sys, re, pathlib
+skills_dir = pathlib.Path(sys.argv[1])
+out_file = pathlib.Path(sys.argv[2])
+lines = ["# Learned Skills (name + operating principle only)\n"]
+for f in sorted(skills_dir.glob("*.md")):
+    if f.name.startswith(".") or f.name in ("SKILL.md",):
+        continue
+    text = f.read_text(errors="replace")
+    name = re.search(r'^name:\s*(.+)$', text, re.M)
+    desc = re.search(r'^description:\s*(.+)$', text, re.M)
+    principle = re.search(r'^\d+\.\s+(.+)$', text, re.M)
+    if name and desc:
+        lines.append(f"- **{name.group(1).strip()}**: {desc.group(1).strip()}")
+        if principle:
+            lines.append(f"  → {principle.group(1).strip()}")
+        lines.append("")
+out_file.write_text("\n".join(lines))
+PYEOF
     LEAN_SIZE=$(wc -c < "$LEAN_FILE" | tr -d ' ')
-    success "Lean cache: $LEAN_SIZE bytes (personal learned skills only — injected into 'claude' sessions)"
+    success "Lean cache: $LEAN_SIZE bytes (~$((LEAN_SIZE/4)) tokens, name+principle only per skill)"
 else
     > "$LEAN_FILE"
     warn "No learned skills found — lean cache is empty"
