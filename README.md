@@ -1,10 +1,10 @@
 # ai-skillweave
 
-> Auto-learning agent harness: captures corrections live, mines session history for patterns, syncs ~450 skills across Claude/Codex/OpenClaw/Pi with MCP pre-configured.
+> Auto-learning agent harness: captures corrections live, mines session history for patterns, syncs ~950 skills across Claude/Codex/OpenClaw/Pi with MCP pre-configured.
 
 One-command setup for all your Ollama agent harnesses: proper MCP servers, web tools, harness-specific configs — all portable and reproducible. Learns from your corrections automatically via real-time hooks and batch session analysis.
 
-**~450 skills** on-disk across 5 sources — see [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for a full categorized listing.
+**~950 skills** on-disk across 5 sources (ECC ~512 + GPTomics/bioSkills 438 + learned) — see [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for a full categorized listing.
 
 ---
 
@@ -430,11 +430,11 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 
 | Harness | Skills | How they load |
 |---------|--------|--------------|
-| `claude` / `ollama launch claude` | **~450 native** + lean skills cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + personal learned skills via `lean-skills.txt` (~1-2K tokens, via `--append-system-prompt-file`) + MCP servers |
+| `claude` / `ollama launch claude` | **~950 native** + lean skills cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + personal learned skills via `lean-skills.txt` (~1-2K tokens, via `--append-system-prompt-file`) + MCP servers |
 | `copilot` (Copilot CLI) | **~246 SKILL.md files** natively | Copilot's built-in skill discovery reads `~/.claude/skills/` as `personal-claude` source automatically — no wrapper needed. Also reads `.github/skills`, `~/.copilot/config/skills`. Disable individual skills via `disabledSkills` in `~/.copilot/settings.json`. Add extra dirs via `COPILOT_SKILLS_DIRS` env var. |
-| `ollama launch openclaw` | **~450 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
-| `ollama launch pi` | **~450 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
-| `ollama launch codex` | **~450 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
+| `ollama launch openclaw` | **~950 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
+| `ollama launch pi` | **~950 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
+| `ollama launch codex` | **~950 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
 
 Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
@@ -843,7 +843,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | ~450 files via native `/skills` + lean cache (~1-2K tokens) | 88 + personal + K-Dense via Project instructions |
+| Skills injection | ~950 files via native `/skills` + lean cache (~1-2K tokens) | 88 + personal + K-Dense via Project instructions |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 

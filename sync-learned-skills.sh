@@ -194,7 +194,39 @@ if [ -d "$HOME/.claude/skills" ] && [ ! -d "$CLAUDE_SKILLS_LEARNED" ]; then
 fi
 
 # =============================================================================
-# Step 3: Update learning log
+# Step 3: Rebuild lean-skills.txt (name + operating principle only)
+# =============================================================================
+
+LEAN_FILE="$HOME/.claude/skills-cache/lean-skills.txt"
+if [ -d "$LEARNED_DIR" ] && ! $DRY_RUN; then
+    log "Step 3: Rebuilding lean-skills.txt..."
+    mkdir -p "$HOME/.claude/skills-cache"
+    python3 - "$LEARNED_DIR" "$LEAN_FILE" << 'PYEOF'
+import sys, re, pathlib
+skills_dir = pathlib.Path(sys.argv[1])
+out_file = pathlib.Path(sys.argv[2])
+lines = ["# Learned Skills (name + operating principle only)\n"]
+for f in sorted(skills_dir.glob("*.md")):
+    if f.name.startswith(".") or f.name in ("SKILL.md",):
+        continue
+    text = f.read_text(errors="replace")
+    name = re.search(r'^name:\s*(.+)', text, re.M)
+    desc = re.search(r'^description:\s*(.+)', text, re.M)
+    principle = re.search(r'^\d+\.\s+(.+)', text, re.M)
+    if name and desc:
+        lines.append(f"- **{name.group(1).strip()}**: {desc.group(1).strip()}")
+        if principle:
+            lines.append(f"  → {principle.group(1).strip()}")
+        lines.append("")
+out_file.write_text("\n".join(lines))
+PYEOF
+    LEAN_SIZE=$(wc -c < "$LEAN_FILE" 2>/dev/null || echo 0)
+    LEAN_TOKENS=$((LEAN_SIZE / 4))
+    success "lean-skills.txt rebuilt: ${LEAN_SIZE} bytes (~${LEAN_TOKENS} tokens)"
+fi
+
+# =============================================================================
+# Step 4: Update learning log
 # =============================================================================
 
 log "Step 3: Updating shared learning log..."
