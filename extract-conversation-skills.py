@@ -55,17 +55,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =============================================================================
 
 def _ensure_deps(verbose: bool = False):
-    """Ensure scikit-learn and numpy are available.
-    
+    """Ensure scikit-learn, numpy, and scikit-llm are available.
+
     sentence-transformers is intentionally NOT checked here — importing it
     can crash the Python process on systems with abseil-cpp/pyarrow version
     conflicts (SIGABRT, not catchable via except Exception). It is imported
     lazily inside _cluster_by_similarity with a try/except that falls back
     to Jaccard clustering if unavailable.
+
+    scikit-llm is used for Stage 1 zero-shot classification via the local
+    Ollama OpenAI-compatible endpoint (localhost:11434/v1) — no cloud API key.
     """
     required = {
         "scikit-learn": "scikit-learn>=1.5.0",
         "numpy": "numpy>=1.26.0",
+        "scikit-llm": "scikit-llm>=0.9.0",
     }
     missing = []
     for module, pkg in required.items():
@@ -112,10 +116,9 @@ DEFAULT_OUTPUT_DIR = Path.home() / ".claude" / "skills" / "learned"
 USAGE_FILE = DEFAULT_OUTPUT_DIR / ".usage.json"
 
 # Model routing hierarchy: try in order until one works
-# Note: Claude Code CLI (-p flag) requires ANTHROPIC_API_KEY, so we check first
 MODEL_PRIORITY = [
-    {"name": "ollama-cloud", "type": "ollama", "model": "qwen3.5:cloud", "timeout": 180},  # Ollama cloud (best quality, no local GPU needed)
-    {"name": "ollama-local", "type": "ollama", "model": "qwen3.6:latest", "timeout": 240},  # Local qwen3.6 (fallback, slower but private)
+    {"name": "ollama-local", "type": "ollama", "model": "qwen3.6:latest", "timeout": 240},  # Local qwen3.6 (primary — 23GB, already pulled)
+    {"name": "ollama-cloud", "type": "ollama", "model": "qwen3.5:cloud", "timeout": 180},   # Cloud fallback
 ]
 
 # Pipeline thresholds (ALMA-inspired)
@@ -405,8 +408,10 @@ class UsageRecord:
 # =============================================================================
 
 class Ingestion:
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, use_llm: bool = False, llm_model: str = "qwen3.6:latest"):
         self.verbose = verbose
+        self.use_llm = use_llm
+        self.llm_model = llm_model
         self.compiled_markers = {
             mtype: [re.compile(p, re.IGNORECASE) for p in patterns]
             for mtype, patterns in CLASSIFICATION_MARKERS.items()
@@ -422,18 +427,58 @@ class Ingestion:
             re.compile(r'\b(you\'re missing|you missed|you forgot)\b', re.IGNORECASE),
         ]
 
-    def score_utterance(self, text: str) -> Tuple[Optional[str], float]:
+    def _llm_classify_batch(self, utterances: List[str]) -> Dict[str, Optional[str]]:
+        """Batch-classify utterances with ZeroShotGPTClassifier via local Ollama.
+
+        Points scikit-llm at the Ollama OpenAI-compatible endpoint
+        (localhost:11434/v1) using qwen3.6:latest. Falls back to {} on any
+        error so the regex path remains the safety net.
         """
-        Classify utterance and return (memory_type, confidence).
-        
+        if not utterances:
+            return {}
+        try:
+            from skllm.config import SKLLMConfig
+            from skllm.models.gpt.classification.zero_shot import ZeroShotGPTClassifier
+
+            SKLLMConfig.set_gpt_key("ollama")
+            SKLLMConfig.set_gpt_url("http://localhost:11434/v1")
+
+            labels = ["anti_pattern", "heuristic", "none"]
+            clf = ZeroShotGPTClassifier(model=self.llm_model)
+            clf.fit(None, labels)
+
+            # Deduplicate to avoid redundant LLM calls
+            unique = list(dict.fromkeys(utterances))
+            if self.verbose:
+                print(f"  [LLM-CLASSIFY] Batch classifying {len(unique)} utterances via {self.llm_model}...")
+            predictions = clf.predict(unique)
+
+            result: Dict[str, Optional[str]] = {}
+            for text, pred in zip(unique, predictions):
+                result[text] = None if pred == "none" else pred
+            if self.verbose:
+                hits = sum(1 for v in result.values() if v is not None)
+                print(f"  [LLM-CLASSIFY] {hits}/{len(unique)} classified as corrections")
+            return result
+        except Exception as e:
+            if self.verbose:
+                print(f"  [LLM-CLASSIFY] Failed ({type(e).__name__}: {e}), regex only")
+            return {}
+
+    def score_utterance(self, text: str, llm_lookup: Optional[Dict[str, Optional[str]]] = None) -> Tuple[Optional[str], float]:
+        """Classify utterance and return (memory_type, confidence).
+
+        Fast path: regex (returns immediately if confidence ≥ 0.80).
+        Slow path: consults llm_lookup dict pre-built by _llm_classify_batch()
+        for borderline cases the regex misses.
+
         Confidence levels:
-          0.95+ = Direct anti-pattern match ("don't", "never", "wrong...instead")
-          0.80+ = Frustration/escalation marker (strong signal)
-          0.60+ = Heuristic pattern match (preference, best practice)
-          0.30-0.50 = Escalation/hesitation (weak signal, needs LLM)
-          0.00-0.25 = No match (skip)
-        
-        Returns (None, 0.0) for noise/irrelevant utterances.
+          0.95+ = Direct anti-pattern regex match
+          0.80+ = Frustration/escalation marker
+          0.78  = LLM-classified (confident but not regex-confirmed)
+          0.60+ = Heuristic regex match
+          0.30-0.50 = Escalation/hesitation (weak signal)
+          0.00  = No match (skip)
         """
         if not text or len(text.strip()) < 10:
             return None, 0.0
@@ -500,7 +545,15 @@ class Ingestion:
         for pattern in medium_heuristic_patterns:
             if re.search(pattern, text_lower, re.IGNORECASE):
                 return "heuristic", 0.55
-        
+
+        # LLM fallback: catches corrections that regex misses (implicit, unusual phrasing)
+        if llm_lookup and text in llm_lookup:
+            llm_class = llm_lookup[text]
+            if llm_class is not None:
+                if self.verbose:
+                    print(f"  [LLM-HIT] {llm_class}: {text[:80]}")
+                return llm_class, 0.78
+
         return None, 0.0
 
     def classify_utterance(self, text: str) -> Optional[str]:
@@ -574,11 +627,39 @@ class Ingestion:
 
     def extract_corrections(self, conversations: List[Dict], harness: str = "unknown") -> List[RawCorrection]:
         """Extract corrections from conversations with multi-turn detection.
-        
+
+        Two-pass approach when use_llm=True:
+          Pass 1 — collect all candidate utterances that regex scores < 0.80
+                    (borderline/unclassified) and batch-classify with LLM.
+          Pass 2 — per-conversation sequential processing with multi-turn
+                    detection, using llm_lookup to catch what regex misses.
+
         Within a session, buffers recent utterances and merges sequences where
         the user escalates (hesitation → frustration → correction) into a single
         rich correction that captures the full reasoning.
         """
+        # --- Pass 1: LLM pre-classification of borderline utterances ---
+        llm_lookup: Dict[str, Optional[str]] = {}
+        if self.use_llm:
+            borderline: List[str] = []
+            for conv in conversations:
+                content = self._extract_user_messages(conv)
+                if not content:
+                    continue
+                for utt in re.split(r"(?<=[.!?])\s+|\n{2,}", content):
+                    utt = utt.strip()
+                    if len(utt) < 10:
+                        continue
+                    if any(p.search(utt) for p in SKIP_PATTERNS):
+                        continue
+                    # Only send utterances regex is uncertain about to the LLM
+                    _, conf = self.score_utterance(utt)
+                    if conf < 0.80:
+                        borderline.append(utt)
+            if borderline:
+                llm_lookup = self._llm_classify_batch(borderline)
+
+        # --- Pass 2: per-conversation extraction with multi-turn detection ---
         corrections = []
         for conv in conversations:
             content = self._extract_user_messages(conv)
@@ -589,18 +670,18 @@ class Ingestion:
             project = self._derive_project(fpath, harness)
             session_id = fpath.stem if hasattr(fpath, 'stem') else ""
             utterances = re.split(r"(?<=[.!?])\s+|\n{2,}", content)
-            
+
             # Multi-turn detection: buffer recent utterances with scores
             # Each entry: (utterance_text, mtype, confidence, is_escalation)
             window: List[Tuple[str, Optional[str], float]] = []
             MAX_WINDOW = 5  # Look back at most 5 utterances
-            
+
             for utt in utterances:
                 utt = utt.strip()
                 if len(utt) < 10:
                     continue
-                
-                mtype, confidence = self.score_utterance(utt)
+
+                mtype, confidence = self.score_utterance(utt, llm_lookup=llm_lookup)
                 window.append((utt, mtype, confidence))
                 
                 # If window exceeds size, pop oldest
@@ -1474,7 +1555,7 @@ class FeedbackTracker:
 
 class Pipeline:
     def __init__(self, output_dir: Path = DEFAULT_OUTPUT_DIR, dry_run: bool = False,
-                 verbose: bool = False, use_llm: bool = False, llm_model: str = "qwen3:30b",
+                 verbose: bool = False, use_llm: bool = False, llm_model: str = "qwen3.6:latest",
                  min_occurrences: int = MIN_OCCURRENCES, incremental: bool = False):
         self.output_dir = output_dir
         self.dry_run = dry_run
@@ -1483,7 +1564,7 @@ class Pipeline:
         self.llm_model = llm_model
         self.min_occurrences = min_occurrences
         self.incremental = incremental
-        self.ingestion = Ingestion(verbose=verbose)
+        self.ingestion = Ingestion(verbose=verbose, use_llm=use_llm, llm_model=llm_model)
         self.learning = Learning(verbose=verbose, min_occurrences=min_occurrences)
         self.consolidation = Consolidation(verbose=verbose, use_llm=use_llm, llm_model=llm_model)
         self.writer = SkillWriter(output_dir, dry_run=dry_run, verbose=verbose)
@@ -1816,8 +1897,8 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--llm", action="store_true",
                         help="Use local Ollama model for distillation (falls back to keyword-based if unavailable)")
-    parser.add_argument("--llm-model", default="qwen3:30b",
-                        help="Ollama model for LLM distillation (default: qwen3:30b)")
+    parser.add_argument("--llm-model", default="qwen3.6:latest",
+                        help="Ollama model for LLM distillation and Stage 1 classification (default: qwen3.6:latest)")
     parser.add_argument("--min-occurrences", type=int, default=MIN_OCCURRENCES,
                         help=f"Minimum unique sessions to form a skill (default: {MIN_OCCURRENCES})")
     parser.add_argument("--stats", action="store_true",
