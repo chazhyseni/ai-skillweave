@@ -424,34 +424,25 @@ class Ingestion:
             re.compile(r'\b(you\'re missing|you missed|you forgot)\b', re.IGNORECASE),
         ]
 
-    # Maximum utterances to send to LLM — keeps Stage 1 fast on large histories
-    _LLM_BATCH_CAP = 400
-    _LLM_CHUNK_SIZE = 50   # utterances per single LLM call
+    _LLM_CHUNK_SIZE = 150   # utterances per single LLM call
+    _LLM_WORKERS = 4        # parallel chunks (Ollama queues extras gracefully)
 
     def _llm_classify_batch(self, utterances: List[str]) -> Dict[str, Optional[str]]:
-        """Batch-classify utterances via chunked LLM calls (50 per call).
+        """Batch-classify ALL borderline utterances via parallel chunked LLM calls.
 
-        Sends _LLM_CHUNK_SIZE utterances per call as a numbered list and asks
-        the model for a comma-separated label list.  This is 50-100× faster
-        than scikit-llm's one-call-per-sample approach and works directly with
-        the existing _try_get_completion() Ollama routing.
-
-        Only the top _LLM_BATCH_CAP utterances (by partial regex signal) are
-        sent so Stage 1 stays under ~2 minutes on large conversation histories.
+        Deduplicates input, splits into chunks of _LLM_CHUNK_SIZE, then sends
+        all chunks in parallel using ThreadPoolExecutor(_LLM_WORKERS).
+        No cap — every borderline utterance is classified.
         """
         if not utterances:
             return {}
 
-        # Deduplicate, cap total
-        unique = list(dict.fromkeys(utterances))[:self._LLM_BATCH_CAP]
-        if self.verbose:
-            print(f"  [LLM-CLASSIFY] {len(unique)} utterances → {(len(unique) + self._LLM_CHUNK_SIZE - 1) // self._LLM_CHUNK_SIZE} LLM calls (chunk={self._LLM_CHUNK_SIZE}) via {self.llm_model}")
-
-        result: Dict[str, Optional[str]] = {}
+        unique = list(dict.fromkeys(utterances))
         total_chunks = (len(unique) + self._LLM_CHUNK_SIZE - 1) // self._LLM_CHUNK_SIZE
+        print(f"  [LLM-CLASSIFY] {len(unique)} utterances → {total_chunks} chunks (size={self._LLM_CHUNK_SIZE}, workers={self._LLM_WORKERS}) via {self.llm_model}")
 
-        for chunk_i, start in enumerate(range(0, len(unique), self._LLM_CHUNK_SIZE)):
-            chunk = unique[start:start + self._LLM_CHUNK_SIZE]
+        def _classify_chunk(args):
+            chunk_i, chunk = args
             prompt = (
                 "Classify each user message as one of: anti_pattern, heuristic, none.\n"
                 "anti_pattern = user correcting AI (don't do X, that's wrong, stop, etc.)\n"
@@ -463,25 +454,37 @@ class Ingestion:
                 "Example for 3 messages: none,anti_pattern,heuristic\nLabels:"
             )
             try:
-                response = _try_get_completion(prompt, timeout=90, verbose=False)
+                response = _try_get_completion(prompt, timeout=120, verbose=False)
                 if not response:
-                    continue
-                # Strip markdown fences / extra whitespace
+                    return chunk_i, {}
                 response = response.strip().strip("`").strip()
                 labels = [lbl.strip().lower() for lbl in response.split(",")]
+                chunk_result = {}
                 for j, utt in enumerate(chunk):
                     if j < len(labels):
                         lbl = labels[j]
-                        result[utt] = lbl if lbl in ("anti_pattern", "heuristic") else None
+                        chunk_result[utt] = lbl if lbl in ("anti_pattern", "heuristic") else None
+                return chunk_i, chunk_result
             except Exception as e:
                 if self.verbose:
                     print(f"  [LLM-CLASSIFY] Chunk {chunk_i+1}/{total_chunks} failed ({type(e).__name__}), skipping")
-                continue
+                return chunk_i, {}
 
-            if self.verbose or (chunk_i + 1) % 5 == 0:
-                done = min(start + self._LLM_CHUNK_SIZE, len(unique))
+        chunks = [
+            (i, unique[s:s + self._LLM_CHUNK_SIZE])
+            for i, s in enumerate(range(0, len(unique), self._LLM_CHUNK_SIZE))
+        ]
+
+        result: Dict[str, Optional[str]] = {}
+        completed = 0
+        with ThreadPoolExecutor(max_workers=self._LLM_WORKERS) as pool:
+            futures = {pool.submit(_classify_chunk, c): c[0] for c in chunks}
+            for fut in as_completed(futures):
+                chunk_i, chunk_result = fut.result()
+                result.update(chunk_result)
+                completed += 1
                 hits = sum(1 for v in result.values() if v is not None)
-                print(f"  [LLM-CLASSIFY] {done}/{len(unique)} classified, {hits} corrections found")
+                print(f"  [LLM-CLASSIFY] {completed}/{total_chunks} chunks done, {hits} corrections so far")
 
         total_hits = sum(1 for v in result.values() if v is not None)
         print(f"  [LLM-CLASSIFY] Done: {total_hits}/{len(unique)} corrections from LLM")
