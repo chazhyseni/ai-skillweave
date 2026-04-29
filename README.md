@@ -428,15 +428,17 @@ ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *ho
 | OpenAI Codex curated | 44 SKILL.md dirs | From OpenAI's Codex skills collection |
 | Personal learned | ~23 (grows) | BMO-style real-time capture (corrections detected live via hooks) + batch 4-stage pipeline |
 
-### What Each Harness Gets
+### What Each Harness Gets (~900 skills each)
 
-| Harness | Skills | How they load |
-|---------|--------|--------------|
-| `claude` / `ollama launch claude` | **~900 native** + lean skills cache | SKILL.md → `~/.claude/skills/` (native `/skills`) + personal learned skills via `lean-skills.txt` (~1-2K tokens, via `--append-system-prompt-file`) + MCP servers |
-| `copilot` (Copilot CLI) | **~900 SKILL.md files** natively | Copilot's built-in skill discovery reads `~/.claude/skills/` as `personal-claude` source automatically — no wrapper needed. Also reads `.github/skills`, `~/.copilot/config/skills`. Disable individual skills via `disabledSkills` in `~/.copilot/settings.json`. Add extra dirs via `COPILOT_SKILLS_DIRS` env var. |
-| `ollama launch openclaw` | **~900 skill dirs** | Real SKILL.md copies in `~/.openclaw/workspace/skills/`, YAML-sanitized |
-| `ollama launch pi` | **~900 skill dirs** | Symlinks in `~/.pi/agent/skills/` |
-| `ollama launch codex` | **~900 + 5 built-in** | YAML-sanitized copies in `~/.codex/skills/` + Codex system skills |
+All harnesses receive the same ~900 skills. They differ only in how skills are delivered:
+
+| Harness | How skills are delivered |
+|---------|--------------------------|
+| `claude` / `ollama launch claude` | Native `~/.claude/skills/` — loaded on demand via `/skills`. Learned skills also injected via `lean-skills.txt` (~1-2K tokens) at launch. |
+| `copilot` (Copilot CLI) | Native discovery from `~/.claude/skills/` as `personal-claude` source — no wrapper needed. Also reads `.github/skills`, `~/.copilot/config/skills`. |
+| `ollama launch openclaw` | YAML-sanitized copies in `~/.openclaw/workspace/skills/` |
+| `ollama launch pi` | Symlinks in `~/.pi/agent/skills/` |
+| `ollama launch codex` | YAML-sanitized copies in `~/.codex/skills/` (names truncated to 64 chars) + 5 Codex built-in system skills |
 
 Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
@@ -609,14 +611,7 @@ Session with no skills invoked: pay only for the index, not the content
 
 ### How skills load in each harness
 
-| Harness | How skills are loaded | All ~900 skills? |
-|---------|----------------------|-----------------|
-| Claude Code | Native deferred loading from `~/.claude/skills/` — content fetched on demand | ✅ Yes |
-| Copilot CLI | Native discovery from `~/.claude/skills/` | ✅ Yes |
-| Codex | Synced to `~/.codex/skills/` by `update-ecc.sh` | ✅ Yes |
-| Pi | Linked to `~/.pi/agent/skills/` | ✅ Yes |
-| OpenClaw | Copied to `~/.openclaw/workspace/skills/` | ✅ Yes |
-| `claude` CLI | lean-skills.txt (~1100 tokens) appended at launch | ✅ Learned skills |
+All harnesses receive the same ~900 skills. See the [What Each Harness Gets](#what-each-harness-gets-900-skills-each) table above for delivery details. Key distinction: Claude Code uses **native deferred loading** — skill content is fetched on demand, so ~900 skill names cost ~4500 tokens but the full content (2000+ tokens per skill) is only loaded when a skill is actually invoked.
 
 ### lean-skills.txt (for `claude` CLI + ollama sessions)
 
