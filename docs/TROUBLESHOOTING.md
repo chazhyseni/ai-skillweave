@@ -11,7 +11,7 @@
 source ~/.zshrc   # or ~/.bashrc
 ```
 
-The new wrapper injects only `lean-skills.txt` (~1-2K tokens — your personal learned skills). The full 450+ skill library loads natively from `~/.claude/skills/` via Claude Code's built-in `/skills` feature.
+The new wrapper injects only `lean-skills.txt` (~1-2K tokens — your personal learned skills). The full ~900 skill library loads natively from `~/.claude/skills/` via Claude Code's built-in `/skills` feature.
 
 ---
 

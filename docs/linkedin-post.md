@@ -4,7 +4,7 @@ Most AI agent setups are stateless by default. Without configuration, they don't
 
 ai-skillweave fixes that.
 
-One install loads ~450 specialized skills across Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Not prompts — structured SKILL.md files with conditions, strategies, anti-patterns, and examples. The agent knows your conventions before you type.
+One install loads ~900 specialized skills across Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Not prompts — structured SKILL.md files with conditions, strategies, anti-patterns, and examples. The agent knows your conventions before you type.
 
 MCP servers extend what it can do: persistent memory, real-time docs lookup, browser automation, codebase context maps, sequential reasoning, token optimization, Google Docs integration, and a bioinformatics knowledge graph.
 

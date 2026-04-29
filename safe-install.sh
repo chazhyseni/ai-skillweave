@@ -542,7 +542,7 @@ generate_skills_block() {
 # Helper function to inject skills as system prompt (uses file to avoid arg length limits)
 # Uses lean-skills.txt (personal learned skills only, ~1-2K tokens) instead of
 # combined-skills.txt (~1.4M tokens — exceeds Claude's 200K context window).
-# The full 450+ skill library loads natively via ~/.claude/skills/ (/skills command).
+# The full ~900 skill library loads natively via ~/.claude/skills/ (/skills command).
 _claude_with_skills() {
     local _skills_file="/tmp/claude-skills-$$.txt"
     cat ~/.claude/skills-cache/lean-skills.txt > "$_skills_file" 2>/dev/null

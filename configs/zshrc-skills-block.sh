@@ -10,7 +10,7 @@
 # Claude Code: inject personal learned skills as system prompt supplement.
 # Uses lean-skills.txt (~personal skills only, ~1-2K tokens) NOT combined-skills.txt
 # (~1.4M tokens which would exceed Claude's 200K context window and crash the session).
-# The full 450+ skill library is already natively available via Claude Code's /skills
+# The full ~900 skill library is already natively available via Claude Code's /skills
 # command from ~/.claude/skills/ — no injection needed for those.
 _claude_with_skills() {
     local _skills_file="/tmp/claude-skills-$$.txt"

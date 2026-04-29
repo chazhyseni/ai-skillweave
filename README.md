@@ -593,7 +593,7 @@ The key is **deferred loading**: skills are indexed (name only in system prompt,
 
 | Layer | What's in context | Token cost |
 |-------|------------------|------------|
-| **Skill index** (always) | ~500 skill names in the available-skills list | ~2500 tokens, cached after first turn |
+| **Skill index** (always) | ~900 skill names in the available-skills list | ~4500 tokens, cached after first turn |
 | **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill | ~1100 tokens (was 5750 before v2.1) |
 | **Skill content** (on demand) | Full SKILL.md loaded when you invoke a skill | 0 tokens unless used |
 
