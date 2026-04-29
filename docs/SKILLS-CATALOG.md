@@ -2,7 +2,7 @@
 
 Overview of all skills available through ai-skillweave, organized by source and category.
 
-**Total: ~~450 on-disk skills synced to harnesses (427 unique across 5 sources)**
+**Total: ~900 on-disk skills across 7 sources (ECC 184 + K-Dense 134 + ClawBio 56 + bioSkills 438 + Anthropic 17 + Codex 44 + learned ~23)**
 
 ---
 
@@ -236,7 +236,52 @@ Unlike other skill sources, ClawBio skills include runnable Python scripts along
 
 ---
 
-## Source 6: SkillGraph Bioinformatics (MCP)
+## Source 6: GPTomics/bioSkills — 438 skills
+
+From [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills). Comprehensive bioinformatics skills organized into 63 categories, installed at depth-3 in `~/.claude/skills/<category>/<skill>/SKILL.md`. Available on-demand via the Skill tool — NOT injected into every session (zero token cost until invoked).
+
+| Category | Skills | Category | Skills |
+|----------|--------|----------|--------|
+| `alignment` | 5 | `alignment-files` | 9 |
+| `alternative-splicing` | 6 | `atac-seq` | 6 |
+| `causal-genomics` | 5 | `chemoinformatics` | 7 |
+| `chip-seq` | 7 | `clinical-biostatistics` | 6 |
+| `clinical-databases` | 10 | `clip-seq` | 5 |
+| `comparative-genomics` | 5 | `copy-number` | 4 |
+| `crispr-screens` | 8 | `data-visualization` | 12 |
+| `database-access` | 11 | `differential-expression` | 6 |
+| `ecological-genomics` | 6 | `epidemiological-genomics` | 5 |
+| `epitranscriptomics` | 5 | `experimental-design` | 4 |
+| `expression-matrix` | 5 | `flow-cytometry` | 8 |
+| `gene-regulatory-networks` | 5 | `genome-annotation` | 6 |
+| `genome-assembly` | 8 | `genome-engineering` | 5 |
+| `genome-intervals` | 7 | `hi-c-analysis` | 8 |
+| `imaging-mass-cytometry` | 6 | `immunoinformatics` | 5 |
+| `liquid-biopsy` | 6 | `long-read-sequencing` | 8 |
+| `machine-learning` | 6 | `metabolomics` | 8 |
+| `metagenomics` | 7 | `methylation-analysis` | 5 |
+| `microbiome` | 6 | `multi-omics-integration` | 4 |
+| `pathway-analysis` | 6 | `phasing-imputation` | 4 |
+| `phylogenetics` | 8 | `population-genetics` | 6 |
+| `primer-design` | 3 | `proteomics` | 9 |
+| `read-alignment` | 4 | `read-qc` | 7 |
+| `reporting` | 5 | `restriction-analysis` | 4 |
+| `ribo-seq` | 5 | `rna-quantification` | 4 |
+| `rna-structure` | 3 | `sequence-io` | 9 |
+| `sequence-manipulation` | 7 | `single-cell` | 14 |
+| `small-rna-seq` | 5 | `spatial-transcriptomics` | 11 |
+| `structural-biology` | 6 | `systems-biology` | 5 |
+| `tcr-bcr-analysis` | 5 | `temporal-genomics` | 5 |
+| `variant-calling` | 13 | `workflow-management` | 4 |
+| `workflows` | 41 | | |
+
+### Access
+- **All harnesses**: Installed by `scripts/install-bioskills.sh` into `~/.claude/skills/` then synced to all harnesses via `update-ecc.sh`
+- **Default**: Enabled in `safe-install.sh` (use `--without-bioskills` to skip)
+
+---
+
+## Source 7: SkillGraph Bioinformatics (MCP)
 
 From [variomeanalytics/bioinformatics-agent-skills](https://github.com/variomeanalytics/bioinformatics-agent-skills). Served dynamically via the SkillGraph MCP server at `https://skillgraph.pipette.bio/mcp`.
 
@@ -269,7 +314,7 @@ From [variomeanalytics/bioinformatics-agent-skills](https://github.com/variomean
 
 ---
 
-## Source 7: Personal Learned Skills — varies
+## Source 8: Personal Learned Skills — varies
 
 Auto-extracted generalizable patterns from your own sessions via a 4-stage ALMA-inspired pipeline. Unlike all other sources, these skills evolve over time — the more you correct your harness, the better it gets.
 
@@ -346,10 +391,4 @@ Making scientific or factual claims that could be verified against literature.
 
 ### Current Learned Skills
 
-Skills in `~/.claude/skills/learned/` (distilled from prior sessions):
-
-| Skill | Description | Priority |
-|-------|-------------|----------|
-| `comprehensive-quality-standard` | Validate output before committing | high |
-| `cross-harness-memory-extraction` | Extract portable patterns, not project noise | high |
-| `pipeline-integrity-verification` | Verify changes don't break existing behavior | high |
+Skills in `~/.claude/skills/learned/` grow over time as you correct your harness. Run `learn-stats` to see the current list and their confidence/decay scores. The pipeline currently produces ~20-45 skills depending on your session history depth.
