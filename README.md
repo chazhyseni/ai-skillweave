@@ -138,9 +138,9 @@ ollama launch copilot     # Copilot CLI + MCP servers
 | **Copilot CLI** | Configures MCP servers (including beads) in `~/.copilot/mcp-config.json` |
 | **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
-| **Claude Code skills** | Copies ECC SKILL.md files to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
+| **Claude Code skills** | Copies all skill sources (ECC, K-Dense, ClawBio, bioSkills, Anthropic, Codex) to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
 | **Lean skills cache** | Personal learned skills at `~/.claude/skills-cache/lean-skills.txt` — name + one operating principle per skill (~1100 tokens total). Full library cache (`combined-skills.txt`) kept for reference but never injected — Claude's 200K window means 5MB would crash every session |
-| **bioSkills** | 438 bioinformatics skills from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) cloned into `~/.claude/skills/` — available on-demand via the Skill tool, NOT injected into every session. Covers variant-calling, single-cell, spatial-transcriptomics, phylogenetics, GWAS, ATAC-seq, CRISPR, and 57 other categories |
+| **bioSkills** | 438 bioinformatics skills from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) cloned into `~/.claude/skills/` — available on-demand via the Skill tool, NOT injected into every session. 63 categories: variant-calling, single-cell, spatial-transcriptomics, phylogenetics, atac-seq, crispr-screens, workflows, and 56 more |
 | **Beads** | `bd` CLI + `beads-mcp` MCP server — cross-session work item tracking. `bd prime` gives AI-optimised project context at session start |
 | **Learning pipeline scripts** | Copies `sync-learned-skills.sh`, `extract-conversation-skills.py`, `safe-install.sh` to `~/.claude/scripts/` so `learn-sync`/`learn-stats`/`learn-prune` aliases work from any directory |
 
@@ -289,7 +289,7 @@ npm install -g @openai/codex
 
 > **Note:** OpenClaw, Pi, Codex, and Copilot are optional. `install.sh` will skip harnesses that aren't installed and show a warning. Ollama is also optional — the installer warns but continues without it.
 >
-> **Copilot CLI:** Copilot natively discovers SKILL.md files from `~/.claude/skills/` as its `personal-claude` source — no injection wrapper needed. It also reads `.github/skills`, `.agents/skills`, `~/.copilot/config/skills`, and `~/.agents/skills`. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`. Copilot reads `~/.claude/skills/` natively, loading the same ~900 skills as Claude Code (ECC + K-Dense + ClawBio + bioSkills + Anthropic + Codex + learned).
+> **Copilot CLI:** Copilot natively discovers SKILL.md files from `~/.claude/skills/` as its `personal-claude` source — no injection wrapper needed. It also reads `.github/skills`, `.agents/skills`, `~/.copilot/config/skills`, and `~/.agents/skills`. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`.
 
 ### 6. Install Python 3
 
@@ -405,15 +405,13 @@ OpenClaw's native subagent system works via `~/.openclaw/subagents/`. After setu
 
 - Web tools (`ollama_web_search`, `ollama_web_fetch`) are enabled via the Ollama plugin
 - Gateway runs on `localhost:18789`
-- Skills are loaded from `~/.openclaw/workspace/skills/` (ECC skills copied there)
+- Skills are loaded from `~/.openclaw/workspace/skills/` (all skills copied there)
 
 ---
 
-## ECC Skills — Everything Claude Code
+## Skills — Cross-Harness Delivery
 
-Skills from **[Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code)** are the largest single source (184 SKILL.md dirs). ECC is a community-maintained library of production-ready AI agent skills covering testing, architecture, security, cloud deployment, language-specific patterns, and more.
-
-ECC skills are structured Markdown prompts (`.md` files) that tell AI agents *how to think* about specific tasks — when to activate, how to approach the problem, examples, and pitfalls.
+Skills are structured Markdown prompts (SKILL.md files) that tell AI agents *how to think* about specific tasks — when to activate, how to approach the problem, examples, and pitfalls. The largest single source is [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) (438 skills), followed by [ECC](https://github.com/affaan-m/everything-claude-code) (184 skills).
 
 ### Skill Sources
 
@@ -551,9 +549,9 @@ Both paths write to `~/.claude/skills/learned/` using the same ECC-compatible SK
 
 Only **2 of 4 memory types** produce generalizable skills: `heuristic` and `anti_pattern`. Preferences are per-user; domain knowledge is project-specific. This ensures learned skills are universally applicable, not project noise.
 
-### Installing ECC
+### Installing Skills
 
-> **Note on defaults:** bare `./safe-install.sh` installs ECC + K-Dense scientific skills + ClawBio bioinformatics (all three are on by default). Use `--without-science` or `--without-bio` to skip a source.
+> **Note on defaults:** bare `./safe-install.sh` installs ECC + K-Dense + ClawBio + bioSkills (all four are on by default). Use `--without-science`, `--without-bio`, or `--without-bioskills` to skip a source.
 
 ```bash
 ./safe-install.sh                                    # ECC + K-Dense + ClawBio (default — all three)
@@ -563,7 +561,7 @@ Only **2 of 4 memory types** produce generalizable skills: `heuristic` and `anti
 ./safe-install.sh --with-curated                     # Also include OpenAI Codex curated skills
 ```
 
-### Keeping ECC Up to Date
+### Keeping Skills Up to Date
 
 When ECC adds new skills upstream, pull and rebuild without a full re-install:
 
@@ -840,7 +838,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | ~900 files via native `/skills` + lean cache (~1-2K tokens) | 88 + personal + K-Dense via Project instructions |
+| Skills injection | ~900 files via native `/skills` + lean cache (~1-2K tokens) | Up to 88 + personal learned via Project instructions (full tier) |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
