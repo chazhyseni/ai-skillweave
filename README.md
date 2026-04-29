@@ -1,10 +1,10 @@
 # ai-skillweave
 
-> Auto-learning agent harness: captures corrections live, mines session history for patterns, syncs ~897 skills across Claude/Codex/OpenClaw/Pi with MCP pre-configured.
+> Auto-learning agent harness: captures corrections live, mines session history for patterns, syncs ~900 skills across Claude/Codex/OpenClaw/Pi with MCP pre-configured.
 
 One-command setup for all your Ollama agent harnesses: proper MCP servers, web tools, harness-specific configs — all portable and reproducible. Learns from your corrections automatically via real-time hooks and batch session analysis.
 
-**~897 skills** on-disk across 7 sources (ECC 184 + Anthropic 18 + Codex 44 + K-Dense 134 + ClawBio 56 + bioSkills 438 + learned ~23) — see [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for a full categorized listing.
+**~900 skills** on-disk across 7 sources (ECC 184 + Anthropic 18 + Codex 44 + K-Dense 134 + ClawBio 56 + bioSkills 438 + learned ~23) — see [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for a full categorized listing.
 
 ---
 
