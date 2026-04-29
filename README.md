@@ -854,10 +854,10 @@ Beads lets you create, track, and share work items across AI coding sessions. Un
 
 | Command | What it does |
 |---------|-------------|
-| `bd prime` | Gives Claude an AI-optimised context dump of all open work items — run at session start |
+| `bd prime` | Type this as your first message inside Claude — pulls all open work items into context |
 | `bd ready` | List items ready to work on |
 | `bd create "task"` | Create a new work item |
-| `bd update <id> "status"` | Update an item's status |
+| `bd update <id> --claim` | Claim a work item (also: `--title`, `--description`, `--notes`) |
 | `bd close <id>` | Mark an item complete |
 
 ### Installation
