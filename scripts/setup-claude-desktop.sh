@@ -11,22 +11,20 @@
 #   Windows: %APPDATA%\Claude\claude_desktop_config.json  (run via Git Bash/WSL)
 #
 # Skills approach:
-#   Claude Desktop discovers skills from ~/.claude/skills/ during agent-mode sessions
-#   (same directory as Claude Code CLI). safe-install.sh already populates this.
-#   The Customize → Capabilities panel uses IndexedDB (not the filesystem), so
-#   local skills won't appear there. Use desktop-batch-import.sh to inject skills
-#   into the Customize panel, or use / slash commands in agent-mode sessions.
+#   1. Agent-mode sessions: Desktop reads ~/.claude/skills/ natively for / slash commands.
+#   2. Customize → Capabilities panel: Reads from the skills-plugin/ directory + manifest.json.
+#   This script injects skills into BOTH paths — symlinks in the skills-plugin dir and
+#   manifest.json entries — so skills appear in the Customize panel AND work via / commands.
 #
 # Usage:
-#   ./scripts/setup-claude-desktop.sh                    # Full setup (MCP + link skills)
+#   ./scripts/setup-claude-desktop.sh                    # Full setup (MCP + inject skills)
 #   ./scripts/setup-claude-desktop.sh --mcp-only         # MCP servers only
-#   ./scripts/setup-claude-desktop.sh --skills-only      # Link skills only (no MCP)
-#   ./scripts/setup-claude-desktop.sh --link-skills       # Symlink from ~/.claude/skills/ (default)
+#   ./scripts/setup-claude-desktop.sh --skills-only      # Inject skills only (no MCP)
 #   ./scripts/setup-claude-desktop.sh --package-skills   # Build .skill files for manual upload
 #   ./scripts/setup-claude-desktop.sh --tier essential    # Minimal skills (~6K tokens)
 #   ./scripts/setup-claude-desktop.sh --tier standard     # Agents + top commands (~54K tokens)
 #   ./scripts/setup-claude-desktop.sh --tier full         # All universal skills (~89K tokens, default)
-#   ./scripts/setup-claude-desktop.sh --force             # Overwrite existing MCP entries
+#   ./scripts/setup-claude-desktop.sh --force             # Overwrite existing skills + MCP entries
 # =============================================================================
 set -e
 
@@ -61,8 +59,9 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: setup-claude-desktop.sh [--mcp-only] [--skills-only] [--package-skills]"
             echo "       [--tier essential|standard|full] [--force] [--clean]"
             echo ""
-            echo "  --package-skills  Build .skill files for manual upload (default: symlink)"
-            echo "  Without --package-skills, skills are symlinked from ~/.claude/skills/ (recommended)"
+            echo "  --package-skills  Build .skill files for manual upload (default: inject into Desktop)"
+            echo "  Without --package-skills, skills are symlinked from ~/.claude/skills/ into Desktop"
+            echo "  --force           Overwrite existing skill directories and MCP entries"
             exit 0
             ;;
         *) shift ;;
@@ -293,16 +292,16 @@ PYEOF
 }
 
 # =============================================================================
-# Part 2: Skills (default: symlink, optional: package .skill files)
+# Part 2: Skills injection into Desktop's Customize → Capabilities panel
 # =============================================================================
 link_skills() {
-    # How Claude Desktop discovers skills (reverse-engineered from app.asar):
-    #   _discoverSkills() reads from this.skillDir, which is join(agentDir, ".claude", "skills")
-    #   where agentDir = home directory. So it reads ~/.claude/skills/ directories
-    #   containing SKILL.md files with YAML frontmatter (name + description required).
-    #   This discovery ONLY runs during agent-mode sessions (agentic coding tool calls).
-    #   The Customize → Capabilities panel uses IndexedDB, NOT the filesystem —
-    #   writing to skills-plugin/ doesn't survive app restarts.
+    # Claude Desktop has two skill discovery mechanisms:
+    #   1. Agent-mode / slash commands: reads ~/.claude/skills/ natively (always works)
+    #   2. Customize → Capabilities panel: reads from skills-plugin/<session>/<project>/skills/ + manifest.json
+    # This function injects skills into BOTH paths by:
+    #   - Creating symlinks from Desktop's skills dir → ~/.claude/skills/ entries
+    #   - Updating manifest.json to register all injected skills
+    # This makes skills appear in the Customize panel AND work via / commands.
 
     local skills_dir="$HOME/.claude/skills"
 
@@ -311,18 +310,215 @@ link_skills() {
         return 1
     fi
 
-    local count=$(find "$skills_dir" -mindepth 1 -maxdepth 1 -type d ! -name 'learned' 2>/dev/null | wc -l | tr -d ' ')
-
+    local count=$(find "$skills_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
     if [ "$count" -eq 0 ]; then
         warn "No skills found in ~/.claude/skills/ — run safe-install.sh first"
         return 1
     fi
 
-    success "Skills: $count available in ~/.claude/skills/"
-    log "Skills work via / slash commands in agent-mode sessions"
-    log "Customize → Capabilities panel does NOT list local skills (it uses IndexedDB)"
-    log "To bulk-import into the Customize panel, close Desktop and run:"
-    log "  $REPO_DIR/scripts/desktop-batch-import.sh"
+    success "Found $count skills in ~/.claude/skills/"
+
+    # Determine Desktop's skills-plugin base path
+    local desktop_base
+    case "$(uname -s)" in
+        Darwin*)  desktop_base="$HOME/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin" ;;
+        Linux*)   desktop_base="$HOME/.config/Claude/local-agent-mode-sessions/skills-plugin" ;;
+        *)        warn "Unsupported OS for Desktop skill injection"; return 1 ;;
+    esac
+
+    if [ ! -d "$desktop_base" ]; then
+        warn "Desktop skills-plugin directory not found: $desktop_base"
+        log "Open Claude Desktop once to create it, then re-run."
+        log "Skills will still work via / slash commands in agent-mode sessions."
+        return 1
+    fi
+
+    # Find all session directories that contain manifest.json
+    local session_dirs=()
+    while IFS= read -r manifest; do
+        # manifest path: <base>/<session-uuid>/<project-uuid>/manifest.json
+        local session_dir
+        session_dir="$(dirname "$manifest")"
+        session_dirs+=("$session_dir")
+    done < <(find "$desktop_base" -name "manifest.json" 2>/dev/null)
+
+    if [ ${#session_dirs[@]} -eq 0 ]; then
+        warn "No Desktop session found — open Claude Desktop and add at least one skill, then re-run."
+        log "Skills will still work via / slash commands in agent-mode sessions."
+        return 1
+    fi
+
+    log "Found ${#session_dirs[@]} Desktop session(s) to inject skills into"
+
+    local total_injected=0
+    local total_updated=0
+
+    for session_dir in "${session_dirs[@]}"; do
+        local manifest="$session_dir/manifest.json"
+        local desk_skills_dir="$session_dir/skills"
+
+        if [ ! -f "$manifest" ]; then
+            warn "No manifest.json in $session_dir — skipping"
+            continue
+        fi
+
+        mkdir -p "$desk_skills_dir"
+
+        # Backup manifest
+        cp "$manifest" "${manifest}.bak_$(date +%Y%m%d_%H%M%S)"
+
+        local injected=0
+        local skipped=0
+
+        # Iterate over each skill in ~/.claude/skills/
+        while IFS= read -r skill_path; do
+            [ -d "$skill_path" ] || continue
+            local skill_name
+            skill_name="$(basename "$skill_path")"
+
+            # Skip the 'learned' directory (handled separately)
+            if [ "$skill_name" = "learned" ]; then
+                # Learned skills are individual .md files, not SKILL.md dirs
+                continue
+            fi
+
+            # Check for SKILL.md
+            if [ ! -f "$skill_path/SKILL.md" ]; then
+                # Try .md file with same name (some skills are just .md files)
+                if [ -f "$skill_path/$skill_name.md" ]; then
+                    : # will be handled below
+                else
+                    continue
+                fi
+            fi
+
+            local dest="$desk_skills_dir/$skill_name"
+
+            if [ -L "$dest" ]; then
+                # Update existing symlink
+                rm "$dest"
+                ln -s "$skill_path" "$dest"
+                skipped=$((skipped + 1))
+            elif [ -d "$dest" ] && [ "$FORCE" = true ]; then
+                # Overwrite real directory with symlink
+                rm -rf "$dest"
+                ln -s "$skill_path" "$dest"
+                total_updated=$((total_updated + 1))
+            elif [ -d "$dest" ]; then
+                # Skip — skill already exists as real directory (from Desktop UI)
+                skipped=$((skipped + 1))
+            else
+                # New skill — create symlink
+                ln -s "$skill_path" "$dest"
+                injected=$((injected + 1))
+            fi
+        done < <(find "$skills_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+
+        # Also handle learned skills (individual .md files in ~/.claude/skills/learned/)
+        local learned_dir="$skills_dir/learned"
+        if [ -d "$learned_dir" ]; then
+            while IFS= read -r md_file; do
+                [ -f "$md_file" ] || continue
+                local skill_name
+                skill_name="learned-$(basename "$md_file" .md)"
+                local dest="$desk_skills_dir/$skill_name"
+
+                if [ -L "$dest" ] || [ -d "$dest" ]; then
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+
+                # Create a temporary directory with SKILL.md for learned skills
+                mkdir -p "$dest"
+                cp "$md_file" "$dest/SKILL.md"
+                injected=$((injected + 1))
+            done < <(find "$learned_dir" -maxdepth 1 -name "*.md" 2>/dev/null)
+        fi
+
+        # Update manifest.json to include all injected skills
+        python3 << PYEOF
+import json, os, subprocess
+from datetime import datetime, timezone
+
+manifest_path = "$manifest"
+skills_dir = "$desk_skills_dir"
+force = $([[ "$FORCE" == "true" ]] && echo "True" || echo "False")
+
+try:
+    with open(manifest_path) as f:
+        manifest = json.load(f)
+except Exception:
+    manifest = {"lastUpdated": 0, "skills": []}
+
+existing_ids = {s['skillId'] for s in manifest.get('skills', [])}
+now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.') + f'{datetime.now().microsecond // 1000:03d}Z'
+added = 0
+
+# Scan skills directory for entries not yet in manifest
+for entry in sorted(os.listdir(skills_dir)):
+    skill_md = os.path.join(skills_dir, entry, 'SKILL.md')
+    # Also check if it's a symlink target
+    entry_path = os.path.join(skills_dir, entry)
+    if not os.path.isdir(entry_path):
+        continue
+    if not os.path.exists(skill_md):
+        continue
+    if entry in existing_ids and not force:
+        continue
+
+    # Extract description from SKILL.md YAML frontmatter
+    desc = entry
+    try:
+        with open(skill_md) as f:
+            content = f.read(2000)
+        in_front = False
+        for line in content.split('\n'):
+            if line.strip() == '---':
+                if in_front:
+                    break
+                in_front = True
+                continue
+            if in_front and line.startswith('description:'):
+                desc = line.split(':', 1)[1].strip().strip('"').strip("'")[:500]
+                break
+    except Exception:
+        pass
+
+    skill_entry = {
+        'skillId': entry,
+        'name': entry,
+        'description': desc,
+        'creatorType': 'custom',
+        'updatedAt': now,
+        'enabled': True
+    }
+
+    if entry in existing_ids:
+        # Update existing entry
+        for i, s in enumerate(manifest['skills']):
+            if s['skillId'] == entry:
+                manifest['skills'][i] = skill_entry
+                break
+    else:
+        manifest['skills'].append(skill_entry)
+        added += 1
+
+manifest['lastUpdated'] = int(datetime.now().timestamp() * 1000)
+
+with open(manifest_path, 'w') as f:
+    json.dump(manifest, f, indent=2)
+
+total = len(manifest['skills'])
+print(f'{added} new skills added, {total} total in manifest')
+PYEOF
+
+        total_injected=$((total_injected + injected))
+        log "Session $(basename "$(dirname "$session_dir")"): $injected new symlinks, $skipped already present"
+    done
+
+    success "Injected $total_injected skills into Desktop ($total_updated updated)"
+    log "Skills available via / slash commands (agent-mode) AND Customize → Capabilities panel"
+    log "Restart Claude Desktop for changes to appear in the Customize panel"
 }
 
 # =============================================================================
@@ -353,7 +549,8 @@ if ! $MCP_ONLY; then
         build_skills
     else
         echo ""
-        log "Linking skills from ~/.claude/skills/..."
+        log "Injecting skills from ~/.claude/skills/ into Desktop sessions..."
+        echo ""
         echo ""
         link_skills
     fi
@@ -367,10 +564,7 @@ echo ""
 echo "  Next steps:"
 echo "    1. Restart Claude Desktop app"
 echo "    2. MCP servers will appear in Claude Desktop settings"
-echo "    3. To batch-import skills (bypasses 15-at-a-time UI limit):"
-echo "       Close Claude Desktop, then run:"
-echo "       $REPO_DIR/scripts/desktop-batch-import.sh"
-echo "       (use --force to overwrite, --clean to remove custom skills first)"
+echo "    3. Skills will appear in Customize → Capabilities panel"
 echo ""
 if $PACKAGE_SKILLS; then
 echo "  Manual skill upload (only needed if / commands don't work):"
@@ -383,8 +577,8 @@ echo ""
 fi
 echo "  Token economics:"
 echo "    MCP servers: zero tokens until invoked"
-echo "    Skills: discovered from ~/.claude/skills/ during agent-mode sessions"
-echo "    Customize panel: uses IndexedDB (not filesystem) -- use batch-import.sh"
+echo "    Skills: symlinked from ~/.claude/skills/ into Desktop sessions"
+echo "    Customize panel: populated via skills-plugin symlinks + manifest.json"
 echo ""
 echo "  Note: skillgraph (78 bioinformatics skills) is an HTTP-type server."
 echo "  Claude Desktop only supports stdio-based servers in its config."

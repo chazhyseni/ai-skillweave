@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# desktop-batch-import.sh — Batch import .skill files into Claude Desktop
+# desktop-batch-import.sh — Batch import skills into Claude Desktop
 # Bypasses the 15-at-a-time UI limit by writing directly to Desktop's storage
 #
 # How it works:
-#   Writes .skill files to the skills-plugin directory that the Customize panel
-#   reads from. Claude Desktop MUST be closed before running this script, as the
-#   app regenerates manifest.json on startup and will discard our changes if it
-#   was running during the import.
+#   Syncs skills from ~/.claude/skills/ into the Desktop skills-plugin directory.
+#   Creates symlinks for each skill and updates manifest.json so skills appear in
+#   both the Customize → Capabilities panel AND via / slash commands.
 #
-# IMPORTANT: The Customize → Capabilities panel uses IndexedDB internally, but
-#   the skills-plugin directory IS read for agent-mode skill discovery. Skills
-#   imported here will appear in the Customize panel after restart, and are also
-#   available via / slash commands in agent-mode sessions.
-#
-# For / slash commands ONLY (without Customize panel visibility), skills in
-#   ~/.claude/skills/ (set up by safe-install.sh) are sufficient.
+#   If configs/desktop-skills/*.skill files exist, those are also imported.
+#   Claude Desktop MUST be closed before running this script, as the app
+#   regenerates manifest.json on startup and will discard changes if running.
 #
 # Usage:
 #   ./scripts/desktop-batch-import.sh                    # Import all skills
@@ -30,7 +25,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_SRC="${REPO_DIR}/configs/desktop-skills"
-DESKTOP_BASE="${HOME}/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin"
+CLAUDE_SKILLS="$HOME/.claude/skills"
+
+# Cross-platform Desktop path
+case "$(uname -s)" in
+    Darwin*)  DESKTOP_BASE="$HOME/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin" ;;
+    Linux*)   DESKTOP_BASE="$HOME/.config/Claude/local-agent-mode-sessions/skills-plugin" ;;
+    *)        echo "ERROR: Unsupported OS: $(uname -s)"; exit 1 ;;
+esac
 
 DRY_RUN=false
 FORCE=false
@@ -54,7 +56,7 @@ for arg in "$@"; do
     esac
 done
 
-# Find active session directory (the one with the most skills)
+# Find all session directories that have a manifest
 if [ ! -d "$DESKTOP_BASE" ]; then
     echo "ERROR: Claude Desktop skills directory not found at:"
     echo "  $DESKTOP_BASE"
@@ -63,46 +65,54 @@ if [ ! -d "$DESKTOP_BASE" ]; then
     exit 1
 fi
 
-# Find session with the most skills (primary/active session)
-SESSION_DIR=$(find "$DESKTOP_BASE" -name "manifest.json" -exec sh -c '
-    count=$(python3 -c "import json; d=json.load(open(\"$1\")); print(len(d.get(\"skills\",[])))" "$1" 2>/dev/null || echo 0)
-    echo "$count $1"
-' _ {} \; 2>/dev/null | sort -rn | head -1 | sed 's/^[0-9]* //')
+# Collect all session directories (inject into ALL sessions)
+SESSIONS=()
+while IFS= read -r manifest; do
+    SESSIONS+=("$(dirname "$manifest")")
+done < <(find "$DESKTOP_BASE" -name "manifest.json" 2>/dev/null)
 
-if [ -z "$SESSION_DIR" ]; then
-    echo "ERROR: No active session found."
+if [ ${#SESSIONS[@]} -eq 0 ]; then
+    echo "ERROR: No Desktop session found."
     echo "Open Claude Desktop, add at least one skill, then re-run."
     exit 1
 fi
-
-SESSION_DIR=$(dirname "$SESSION_DIR")  # manifest.json → session dir
-SKILLS_DIR="${SESSION_DIR}/skills"
-MANIFEST="${SESSION_DIR}/manifest.json"
 
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║   Claude Desktop — Batch Skill Import                ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-echo "Session: $(basename "$(dirname "$SESSION_DIR")")"
-echo "Skills dir: $SKILLS_DIR"
-echo ""
+echo "Found ${#SESSIONS[@]} session(s)"
 
-# Count existing skills
-EXISTING=$(python3 -c "import json; d=json.load(open('$MANIFEST')); print(len(d.get('skills',[])))" 2>/dev/null || echo 0)
-echo "Currently installed: $EXISTING skills"
+TOTAL_IMPORTED=0
+TOTAL_SKIPPED=0
+TOTAL_UPDATED=0
 
-# Count source skills
-TOTAL_SRC=$(ls "$SKILLS_SRC"/*.skill 2>/dev/null | wc -l | tr -d ' ')
-echo "Available to import: $TOTAL_SRC skill files"
-echo ""
+for SESSION_DIR in "${SESSIONS[@]}"; do
+    MANIFEST="$SESSION_DIR/manifest.json"
+    SKILLS_DIR="$SESSION_DIR/skills"
+    mkdir -p "$SKILLS_DIR"
 
-# --clean: remove all custom (non-anthropic) skills first
-if [ "$CLEAN" = true ] && [ "$DRY_RUN" = false ]; then
-    BACKUP="${MANIFEST}.bak_clean_$(date +%Y%m%d_%H%M%S)"
-    cp "$MANIFEST" "$BACKUP"
-    echo "Backup: $BACKUP"
+    echo ""
+    echo "Session: $(basename "$(dirname "$SESSION_DIR")")"
+    echo "Skills dir: $SKILLS_DIR"
 
-    python3 -c "
+    EXISTING=$(python3 -c "import json; d=json.load(open('$MANIFEST')); print(len(d.get('skills',[])))" 2>/dev/null || echo 0)
+    echo "Currently installed: $EXISTING skills"
+
+    # Count source: .skill files + ~/.claude/skills/ directories
+    SKILL_FILE_COUNT=0
+    [ -d "$SKILLS_SRC" ] && SKILL_FILE_COUNT=$(find "$SKILLS_SRC" -maxdepth 1 -name '*.skill' 2>/dev/null | wc -l | tr -d ' ')
+    CLAUDE_SKILLS_COUNT=0
+    [ -d "$CLAUDE_SKILLS" ] && CLAUDE_SKILLS_COUNT=$(find "$CLAUDE_SKILLS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    echo "Sources: $SKILL_FILE_COUNT .skill files, $CLAUDE_SKILLS_COUNT skills in ~/.claude/skills/"
+
+    # --clean: remove all custom (non-anthropic) skills first
+    if [ "$CLEAN" = true ] && [ "$DRY_RUN" = false ]; then
+        BACKUP="${MANIFEST}.bak_clean_$(date +%Y%m%d_%H%M%S)"
+        cp "$MANIFEST" "$BACKUP"
+        echo "Backup: $BACKUP"
+
+        python3 -c "
 import json
 manifest = json.load(open('$MANIFEST'))
 before = len(manifest.get('skills', []))
@@ -113,8 +123,7 @@ with open('$MANIFEST', 'w') as f:
 print(f'Cleaned: {before} -> {len(manifest[\"skills\"])} (kept anthropic skills)')
 "
 
-    # Remove custom skill directories
-    python3 -c "
+        python3 -c "
 import json, os, shutil
 manifest = json.load(open('$MANIFEST'))
 keep = {s['skillId'] for s in manifest.get('skills', [])}
@@ -127,59 +136,125 @@ for entry in os.listdir(skills_dir):
         removed += 1
 print(f'Removed {removed} custom skill directories')
 "
-    echo ""
-fi
-
-# Backup manifest (if not already backed up by --clean)
-if [ "$DRY_RUN" = false ] && [ "$CLEAN" = false ]; then
-    BACKUP="${MANIFEST}.bak_$(date +%Y%m%d_%H%M%S)"
-    cp "$MANIFEST" "$BACKUP"
-    echo "Backup: $BACKUP"
-fi
-
-# Import skills
-IMPORTED=0
-SKIPPED=0
-UPDATED=0
-
-for skill_file in "$SKILLS_SRC"/*.skill; do
-    [ -f "$skill_file" ] || continue
-    skill_name=$(basename "$skill_file" .skill)
-
-    # Check if already installed
-    if [ -d "${SKILLS_DIR}/${skill_name}" ] && [ "$FORCE" = false ]; then
-        SKIPPED=$((SKIPPED + 1))
-        continue
     fi
 
-    if [ "$DRY_RUN" = true ]; then
-        echo "  [DRY] Would import: $skill_name"
-        IMPORTED=$((IMPORTED + 1))
-        continue
+    # Backup manifest (if not already backed up by --clean)
+    if [ "$DRY_RUN" = false ] && [ "$CLEAN" = false ]; then
+        BACKUP="${MANIFEST}.bak_$(date +%Y%m%d_%H%M%S)"
+        cp "$MANIFEST" "$BACKUP"
+        echo "Backup: $BACKUP"
     fi
 
-    # Unzip skill into destination (overwrites if exists)
-    if [ -d "${SKILLS_DIR}/${skill_name}" ]; then
-        rm -rf "${SKILLS_DIR}/${skill_name}"
-        UPDATED=$((UPDATED + 1))
+    IMPORTED=0
+    SKIPPED=0
+    UPDATED=0
+
+    # Source 1: .skill files from configs/desktop-skills/ (if they exist)
+    if [ -d "$SKILLS_SRC" ] && ls "$SKILLS_SRC"/*.skill >/dev/null 2>&1; then
+        for skill_file in "$SKILLS_SRC"/*.skill; do
+            [ -f "$skill_file" ] || continue
+            skill_name=$(basename "$skill_file" .skill)
+
+            if [ -d "${SKILLS_DIR}/${skill_name}" ] && [ "$FORCE" = false ]; then
+                SKIPPED=$((SKIPPED + 1))
+                continue
+            fi
+
+            if [ "$DRY_RUN" = true ]; then
+                echo "  [DRY] Would import .skill: $skill_name"
+                IMPORTED=$((IMPORTED + 1))
+                continue
+            fi
+
+            if [ -d "${SKILLS_DIR}/${skill_name}" ]; then
+                rm -rf "${SKILLS_DIR}/${skill_name}"
+                UPDATED=$((UPDATED + 1))
+            fi
+
+            if unzip -o -q "$skill_file" -d "$SKILLS_DIR" 2>/dev/null; then
+                IMPORTED=$((IMPORTED + 1))
+            else
+                echo "  [WARN] Failed to extract .skill: $skill_name"
+            fi
+        done
     fi
 
-    if unzip -o -q "$skill_file" -d "$SKILLS_DIR" 2>/dev/null; then
-        IMPORTED=$((IMPORTED + 1))
-    else
-        echo "  [WARN] Failed to extract: $skill_name"
+    # Source 2: Symlink from ~/.claude/skills/ (primary source — always available)
+    if [ -d "$CLAUDE_SKILLS" ]; then
+        while IFS= read -r skill_path; do
+            [ -d "$skill_path" ] || continue
+            skill_name=$(basename "$skill_path")
+
+            # Skip 'learned' dir (handled separately)
+            if [ "$skill_name" = "learned" ]; then
+                # Handle learned skills (individual .md files)
+                local_learned_dir="$skill_path"
+                if [ -d "$local_learned_dir" ]; then
+                    while IFS= read -r md_file; do
+                        [ -f "$md_file" ] || continue
+                        learned_name="learned-$(basename "$md_file" .md)"
+                        learned_dest="$SKILLS_DIR/$learned_name"
+
+                        if [ -d "$learned_dest" ] || [ -L "$learned_dest" ]; then
+                            if [ "$FORCE" = true ]; then
+                                rm -rf "$learned_dest"
+                            else
+                                SKIPPED=$((SKIPPED + 1))
+                                continue
+                            fi
+                        fi
+
+                        if [ "$DRY_RUN" = true ]; then
+                            echo "  [DRY] Would import learned skill: $learned_name"
+                            continue
+                        fi
+
+                        mkdir -p "$learned_dest"
+                        cp "$md_file" "$learned_dest/SKILL.md"
+                        IMPORTED=$((IMPORTED + 1))
+                    done < <(find "$local_learned_dir" -maxdepth 1 -name "*.md" 2>/dev/null)
+                fi
+                continue
+            fi
+
+            # Skip if no SKILL.md
+            if [ ! -f "$skill_path/SKILL.md" ]; then
+                continue
+            fi
+
+            dest="$SKILLS_DIR/$skill_name"
+
+            if [ -L "$dest" ]; then
+                # Update existing symlink
+                if [ "$FORCE" = true ]; then
+                    rm "$dest"
+                else
+                    SKIPPED=$((SKIPPED + 1))
+                    continue
+                fi
+            elif [ -d "$dest" ]; then
+                if [ "$FORCE" = true ]; then
+                    rm -rf "$dest"
+                else
+                    SKIPPED=$((SKIPPED + 1))
+                    continue
+                fi
+            fi
+
+            if [ "$DRY_RUN" = true ]; then
+                echo "  [DRY] Would symlink: $skill_name"
+                IMPORTED=$((IMPORTED + 1))
+                continue
+            fi
+
+            ln -s "$skill_path" "$dest"
+            IMPORTED=$((IMPORTED + 1))
+        done < <(find "$CLAUDE_SKILLS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
     fi
-done
 
-if [ "$DRY_RUN" = true ]; then
-    echo ""
-    echo "Dry run: would import $IMPORTED, skip $SKIPPED existing."
-    exit 0
-fi
-
-# Update manifest.json — scan skills dir and add any missing entries
-export MANIFEST SKILLS_DIR
-python3 << 'PYEOF'
+    # Update manifest.json — scan skills dir and add any missing entries
+    export MANIFEST SKILLS_DIR
+    python3 << 'PYEOF'
 import json, os
 from datetime import datetime, timezone
 
@@ -196,10 +271,13 @@ except Exception:
 existing_ids = {s['skillId'] for s in manifest.get('skills', [])}
 added = 0
 
-# Scan skills directory for new entries
+# Scan skills directory for new entries (follows symlinks)
 for entry in sorted(os.listdir(skills_dir)):
-    skill_md = os.path.join(skills_dir, entry, 'SKILL.md')
-    if not os.path.isdir(os.path.join(skills_dir, entry)):
+    entry_path = os.path.join(skills_dir, entry)
+    # Resolve symlinks
+    real_path = os.path.realpath(entry_path) if os.path.islink(entry_path) else entry_path
+    skill_md = os.path.join(real_path, 'SKILL.md')
+    if not os.path.isdir(real_path):
         continue
     if not os.path.exists(skill_md):
         continue
@@ -242,14 +320,21 @@ with open(manifest_path, 'w') as f:
 print(f'Manifest updated: +{added} new skills ({len(manifest["skills"])} total)')
 PYEOF
 
-FINAL=$(python3 -c "import json; d=json.load(open('$MANIFEST')); print(len(d.get('skills',[])))" 2>/dev/null || echo "?")
+    FINAL=$(python3 -c "import json; d=json.load(open('$MANIFEST')); print(len(d.get('skills',[])))" 2>/dev/null || echo "?")
+    echo "  Imported: $IMPORTED new, $UPDATED updated, $SKIPPED existing"
+    echo "  Total:    $FINAL skills in manifest"
+    TOTAL_IMPORTED=$((TOTAL_IMPORTED + IMPORTED))
+    TOTAL_SKIPPED=$((TOTAL_SKIPPED + SKIPPED))
+    TOTAL_UPDATED=$((TOTAL_UPDATED + UPDATED))
+done
+
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║   Import Complete                                    ║"
 echo "╚══════════════════════════════════════════════════════╝"
-echo "  Imported: $IMPORTED new skills"
-echo "  Updated:  $UPDATED overwritten (--force)"
-echo "  Skipped:  $SKIPPED already installed"
-echo "  Total:    $FINAL skills in manifest"
+echo "  Sessions:  ${#SESSIONS[@]}"
+echo "  Imported:  $TOTAL_IMPORTED new skills"
+echo "  Updated:   $TOTAL_UPDATED overwritten (--force)"
+echo "  Skipped:   $TOTAL_SKIPPED already installed"
 echo ""
 echo "  IMPORTANT: Restart Claude Desktop for changes to take effect."

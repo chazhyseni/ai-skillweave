@@ -760,19 +760,20 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 ### Quick setup
 
 ```bash
-# Full setup: MCP servers + curated skills file
+# Full setup: MCP servers + inject skills into Desktop sessions
 ./scripts/setup-claude-desktop.sh
 
 # MCP servers only (zero token cost — servers idle until invoked)
 ./scripts/setup-claude-desktop.sh --mcp-only
 
-# Build skills file only (for pasting into a Desktop Project)
+# Inject skills only (no MCP)
 ./scripts/setup-claude-desktop.sh --skills-only
 
-# Choose skill tier (default: full)
-./scripts/setup-claude-desktop.sh --tier essential   # Personal learned skills only
-./scripts/setup-claude-desktop.sh --tier standard    # Agents + top commands + personal
-./scripts/setup-claude-desktop.sh --tier full        # All universal skills + personal
+# Overwrite existing skills
+./scripts/setup-claude-desktop.sh --skills-only --force
+
+# Package .skill files for manual upload (fallback method)
+./scripts/setup-claude-desktop.sh --package-skills --tier full
 ```
 
 ### What gets configured
@@ -792,44 +793,48 @@ The Claude Desktop app (GUI) uses a different config path than Claude Code CLI. 
 
 > **Note:** `skillgraph` (bioinformatics skills via MCP) is an HTTP-type server. Claude Desktop's config file does not support remote/HTTP servers — add it via **Settings → Integrations** in the Desktop UI instead. It works natively in Claude Code CLI (`~/.claude.json`).
 
-**Curated skills** — built into `configs/claude-desktop-project-instructions.md`:
+**Skills injection** — skills from `~/.claude/skills/` are symlinked into the Desktop's `skills-plugin` directory and registered in `manifest.json`. This makes them appear in both:
 
-| Tier | Skills | Size | Tokens | What's included |
-|------|--------|------|--------|-----------------|
-| `essential` | varies | varies | varies | Personal learned skills only (from `~/.claude/skills/learned/`) |
-| `standard` | 50 + personal | ~220KB+ | ~55K+ | + 27 universal agents + 23 top commands |
-| `full` | 88 + personal | ~360KB+ | ~90K+ | + 27 universal agents + ALL ~61 universal commands |
+- **Customize → Capabilities panel** — after restarting Desktop
+- **Agent-mode `/` slash commands** — during coding sessions
 
-### How to install skills
+### How skill injection works
 
-Skills are packaged as `.skill` files (zip format with sanitized YAML frontmatter) and uploaded via the Desktop app's built-in upload feature.
+The `setup-claude-desktop.sh` script:
+
+1. Finds all Desktop session directories under `~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/`
+2. Creates symlinks from each skill in `~/.claude/skills/` into the Desktop's `skills/` directory
+3. Updates `manifest.json` to register all injected skills
+
+For bulk import (e.g. after a clean install), you can also use:
 
 ```bash
-# 1. Package all skills as .skill files
-./scripts/build-desktop-skills.sh                   # default: full tier
-./scripts/build-desktop-skills.sh --tier standard    # fewer skills
-
-# 2. Open the output folder
-open configs/desktop-skills/
+# Close Claude Desktop first, then run:
+./scripts/desktop-batch-import.sh             # Import all skills
+./scripts/desktop-batch-import.sh --dry-run   # Preview what would be imported
+./scripts/desktop-batch-import.sh --force     # Overwrite existing
+./scripts/desktop-batch-import.sh --clean     # Remove custom skills first
 ```
 
-Then in Claude Desktop:
+### Manual upload (fallback)
 
-1. Go to **Customize** → **Skills**
-2. Click **+** → **Upload a skill**
-3. Select `.skill` files from `configs/desktop-skills/` (you can select multiple)
+If symlinks don't work (e.g. cross-filesystem), you can package skills as `.skill` files:
 
-To update skills later (e.g. after `update-ecc.sh`), re-run `build-desktop-skills.sh` and re-upload.
+```bash
+./scripts/build-desktop-skills.sh                   # default: full tier
+./scripts/build-desktop-skills.sh --tier standard    # fewer skills
+```
+
+Then in Claude Desktop: **Customize** → **Skills** → **+** → **Upload a skill** → select from `configs/desktop-skills/`.
 
 ### Token economics (Desktop)
 
 | Component | Token cost |
 |-----------|-----------|
 | MCP servers | Zero until invoked |
-| Skills (full tier) | ~90K+ tokens on first message, cached after that |
-| Skills (standard tier) | ~55K+ tokens on first message, cached after that |
+| Skills (symlinked) | Zero — loaded on-demand, no injection overhead |
 
-Skills are injected as Project instructions (system prompt) and cached by Claude after the first turn — similar to prompt caching in Claude Code CLI.
+Skills are symlinked (not copied), so they load on-demand just like in Claude Code CLI — no context window overhead.
 
 ### CLI vs Desktop comparison
 
@@ -838,7 +843,7 @@ Skills are injected as Project instructions (system prompt) and cached by Claude
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | ~900 files via native `/skills` + lean cache (~1-2K tokens) | Up to 88 + personal learned via Project instructions (full tier) |
+| Skills injection | ~900 files via native `/skills` + lean cache (~1-2K tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
