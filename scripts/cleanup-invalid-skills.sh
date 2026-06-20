@@ -10,9 +10,10 @@
 # are valid in Claude (no limit) and are directory-truncated by update-ecc.sh
 # when synced to Codex while preserving the name: field for cross-harness
 # equivalence. If you really want to purge > 64-char names, do it manually
-# (e.g. `find ~/.claude/skills/learned -mindepth 1 -maxdepth 1 -type d \
-#   -printf '%f\n' | awk 'length($0) > 64'`) — but be aware that some long
-# names are legitimate in Claude-only contexts.
+# (e.g. `for d in ~/.claude/skills/learned/*/; do
+#    [ ${#d##*/} -gt 64 ] && echo "${d##*/}"; done` — portable across macOS
+# and Linux). But be aware that some long names are legitimate in Claude-only
+# contexts.
 #
 # Safe to run (only touches learned skills, not curated/official).
 # Moves deleted skills to ~/.claude/skills/learned/.archive/ instead of rm.

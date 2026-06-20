@@ -277,7 +277,7 @@ section "Copilot CLI"
 if command -v copilot >/dev/null 2>&1; then
     ok "copilot binary found: $(command -v copilot)"
 else
-    warn "copilot not found — install: brew install gh/copilot OR npm install -g @github/copilot-cli"
+    warn "copilot not found — install: npm install -g @github/copilot"
 fi
 
 if [ -f "$HOME/.copilot/mcp-config.json" ]; then
