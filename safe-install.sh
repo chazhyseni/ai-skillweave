@@ -578,11 +578,26 @@ _pi_with_skills() {
 }
 
 _copilot_with_skills() {
-    # Copilot CLI natively discovers SKILL.md files from ~/.claude/skills/ as "personal-claude"
-    # source — no prompt injection needed. It also reads .github/skills, .agents/skills,
-    # ~/.copilot/config/skills, ~/.agents/skills. Use COPILOT_SKILLS_DIRS to add extra dirs.
-    # This wrapper is a passthrough for env cleanup only.
-    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command copilot "$@")
+    # Copilot CLI natively discovers SKILL.md files from:
+    #   1. ~/.claude/skills/ (read as the 'personal-claude' source)
+    #   2. ~/.copilot/config/skills/ (read as 'copilot-config' — symlinked to ~/.claude/skills by setup-copilot-skills.sh)
+    #   3. ~/.agents/skills/ (Agent Skills spec standard path)
+    #   4. .github/skills/ and .agents/skills/ inside the current project
+    #   5. Any path in COPILOT_SKILLS_DIRS (colon-separated, like PATH)
+    # The explicit env-var export below guarantees Copilot finds the cross-harness
+    # skill pool without requiring a shell reload, mirroring the same fallback
+    # pattern used by _codex_with_skills, _pi_with_skills, etc.
+    # This wrapper is otherwise a passthrough for env-var cleanup.
+    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT
+     if [ -z "${COPILOT_SKILLS_DIRS:-}" ]; then
+         # Build a sensible default only if the env-var wasn't already set
+         # (e.g. by ~/.bashrc export from setup-copilot-skills.sh).
+         local _dirs=""
+         [ -d "$HOME/.claude/skills" ] && _dirs="$HOME/.claude/skills"
+         [ -d "$HOME/.pi/agent/skills" ] && _dirs="${_dirs:+$_dirs:}$HOME/.pi/agent/skills"
+         [ -n "$_dirs" ] && export COPILOT_SKILLS_DIRS="$_dirs"
+     fi
+     command copilot "$@")
 }
 
 # Wrapper aliases

@@ -438,6 +438,8 @@ if should_run "copilot"; then
     section "Copilot CLI"
     install_harness "Copilot CLI" "copilot" "npm install -g @github/copilot"
     bash "$REPO_DIR/scripts/setup-copilot.sh" && success "Copilot CLI MCP configured" || warn "Copilot setup skipped (not installed yet)"
+    # Bridge Copilot to the cross-harness skill pool (symlink + COPILOT_SKILLS_DIRS)
+    bash "$REPO_DIR/scripts/setup-copilot-skills.sh" && success "Copilot skill bridge installed" || warn "Copilot skill bridge skipped (run scripts/setup-copilot-skills.sh manually after installing skills)"
 fi
 
 # =============================================================================
