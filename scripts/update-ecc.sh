@@ -451,19 +451,41 @@ def sync_to_harness_symlink_or_sanitize(skill_name, skill_dir, dest_dir):
     codex_name = skill_name[:64].rstrip("-")
     dst_path = os.path.join(dest_dir, codex_name)
 
-    if not os.path.exists(dst_path):
-        if needs_sanitize(src):
-            os.makedirs(dst_path, exist_ok=True)
-            # NOTE: deliberately NOT rewriting the `name:` field. The skill
-            # keeps its original name in SKILL.md even if the directory is
-            # truncated — this preserves cross-harness equivalence.
-            content = sanitize_skill_md(src)
-            with open(os.path.join(dst_path, "SKILL.md"), "w") as f:
-                f.write(content)
-        else:
-            os.symlink(skill_dir, dst_path)
-        return True
-    return False
+    # Use os.path.lexists (NOT os.path.exists) so we detect broken symlinks
+    # too. A broken symlink returns False for exists() (it follows the link)
+    # but True for lexists() (it sees the symlink inode). Without this, a
+    # prior install's symlink whose target moved/replaced would cause
+    # os.symlink() below to raise FileExistsError.
+    if os.path.lexists(dst_path):
+        # Existing entry at the destination. Check if it's a valid symlink
+        # to the same target — if so, no work needed.
+        try:
+            if os.path.islink(dst_path) and os.path.realpath(dst_path) == os.path.realpath(skill_dir):
+                return False
+        except OSError:
+            pass
+        # Otherwise this is a stale entry (broken symlink, real directory
+        # from a different source, etc.). Remove and let the sync continue.
+        try:
+            if os.path.islink(dst_path) or os.path.isfile(dst_path):
+                os.remove(dst_path)
+            else:
+                import shutil as _shutil
+                _shutil.rmtree(dst_path)
+        except OSError:
+            return False  # can't recover; skip this skill
+
+    if needs_sanitize(src):
+        os.makedirs(dst_path, exist_ok=True)
+        # NOTE: deliberately NOT rewriting the `name:` field. The skill
+        # keeps its original name in SKILL.md even if the directory is
+        # truncated — this preserves cross-harness equivalence.
+        content = sanitize_skill_md(src)
+        with open(os.path.join(dst_path, "SKILL.md"), "w") as f:
+            f.write(content)
+    else:
+        os.symlink(skill_dir, dst_path)
+    return True
 
 
 # Pre-flight: list any skills whose names would trigger codex truncation. This
