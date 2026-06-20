@@ -1,6 +1,7 @@
 {
   "_comment": "MCP servers for GitHub Copilot CLI (~/.copilot/mcp-config.json).",
   "_install": "Run: scripts/setup-copilot.sh — merges these into ~/.copilot/mcp-config.json automatically.",
+  "_skill_bridge": "scripts/setup-copilot-skills.sh — bridges Copilot to the cross-harness skill pool (symlink + COPILOT_SKILLS_DIRS).",
   "_note": "Copilot CLI supports command and http type MCP servers via --additional-mcp-config.",
 
   "mcpServers": {

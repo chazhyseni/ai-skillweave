@@ -3,9 +3,16 @@
 # cleanup-invalid-skills.sh — Remove stale/invalid learned skills
 # =============================================================================
 # Deletes skills with:
-#   - Names > 64 characters (truncated, invalid)
 #   - Invalid YAML (mapping values not allowed, etc.)
 #   - Empty/missing condition or strategy
+#
+# Note: a > 64-char name is no longer treated as invalid here. Names this long
+# are valid in Claude (no limit) and are directory-truncated by update-ecc.sh
+# when synced to Codex while preserving the name: field for cross-harness
+# equivalence. If you really want to purge > 64-char names, do it manually
+# (e.g. `find ~/.claude/skills/learned -mindepth 1 -maxdepth 1 -type d \
+#   -printf '%f\n' | awk 'length($0) > 64'`) — but be aware that some long
+# names are legitimate in Claude-only contexts.
 #
 # Safe to run (only touches learned skills, not curated/official).
 # Moves deleted skills to ~/.claude/skills/learned/.archive/ instead of rm.
@@ -30,27 +37,22 @@ check_skill_dir() {
     local skill_name
     skill_name=$(basename "$dir")
 
-    # Check 1: name length > 64
-    if [ ${#skill_name} -gt 64 ]; then
-        echo "INVALID: name too long (${#skill_name} chars)"
-        return 0
-    fi
-
-    # Check 2: SKILL.md exists and has valid YAML front matter
+    # Check 1: SKILL.md exists and has valid YAML front matter
+    # (Note: name length is not checked here. See header comment.)
     local skill_file="$dir/SKILL.md"
     if [ ! -f "$skill_file" ]; then
         echo "INVALID: missing SKILL.md"
         return 0
     fi
 
-    # Check 3: YAML front matter integrity
+    # Check 2: YAML front matter integrity
     # Look for "invalid YAML" or truncated front matter
     if grep -q "invalid YAML" "$skill_file" 2>/dev/null; then
         echo "INVALID: corrupted YAML"
         return 0
     fi
 
-    # Check 4: Empty or missing condition/strategy
+    # Check 3: Empty or missing condition/strategy
     local has_condition
     has_condition=$(grep -c "^condition:" "$skill_file" 2>/dev/null || echo 0)
     local has_strategy
@@ -92,7 +94,12 @@ if [ -d "$CODEX_LEARNED" ]; then
         [ -d "$skill_dir" ] || continue
         skill_name=$(basename "$skill_dir")
 
-        # Only check skills that look like learned skills (long names or flat .md)
+        # Codex has a 64-char directory-name limit. update-ecc.sh directory-truncates
+        # source skills > 64 chars while preserving the name: field, so a name
+        # exactly at the limit is fine. We only flag/remove names that exceed
+        # 64 chars (which would mean the truncation failed and the skill truly
+        # can't be loaded by Codex). For non-Codex harnesses below, no name
+        # length check is applied — Claude/OpenClaw/Pi have no such limit.
         if [ ${#skill_name} -gt 64 ]; then
             warn "Removing Codex skill $skill_name — name too long (${#skill_name} chars)"
             mv "$skill_dir" "$ARCHIVE_DIR/codex-$skill_name-$(date +%s)"
@@ -115,19 +122,14 @@ if [ -d "$CODEX_LEARNED" ]; then
 fi
 
 # Clean learned skills in OpenClaw
+# (No name-length check: OpenClaw has no 64-char limit; the workspace dir
+# accepts arbitrary-length directory names.)
 OPENCLAW_LEARNED="$HOME/.openclaw/workspace/skills"
 if [ -d "$OPENCLAW_LEARNED" ]; then
     log "Checking OpenClaw learned skills: $OPENCLAW_LEARNED"
     for skill_dir in "$OPENCLAW_LEARNED"/*; do
         [ -d "$skill_dir" ] || continue
         skill_name=$(basename "$skill_dir")
-
-        if [ ${#skill_name} -gt 64 ]; then
-            warn "Removing OpenClaw skill $skill_name — name too long"
-            mv "$skill_dir" "$ARCHIVE_DIR/openclaw-$skill_name-$(date +%s)"
-            REMOVED=$((REMOVED + 1))
-            continue
-        fi
 
         if [ -f "$skill_dir/SKILL.md" ] && grep -q "invalid YAML" "$skill_dir/SKILL.md" 2>/dev/null; then
             warn "Removing OpenClaw skill $skill_name — corrupted YAML"
@@ -141,19 +143,14 @@ if [ -d "$OPENCLAW_LEARNED" ]; then
 fi
 
 # Clean learned skills in Pi
+# (No name-length check: Pi has no 64-char limit; the agent skills dir
+# accepts arbitrary-length directory names.)
 PI_LEARNED="$HOME/.pi/agent/skills"
 if [ -d "$PI_LEARNED" ]; then
     log "Checking Pi learned skills: $PI_LEARNED"
     for skill_dir in "$PI_LEARNED"/*; do
         [ -d "$skill_dir" ] || continue
         skill_name=$(basename "$skill_dir")
-
-        if [ ${#skill_name} -gt 64 ]; then
-            warn "Removing Pi skill $skill_name — name too long"
-            mv "$skill_dir" "$ARCHIVE_DIR/pi-$skill_name-$(date +%s)"
-            REMOVED=$((REMOVED + 1))
-            continue
-        fi
 
         if [ -f "$skill_dir/SKILL.md" ] && grep -q "invalid YAML" "$skill_dir/SKILL.md" 2>/dev/null; then
             warn "Removing Pi skill $skill_name — corrupted YAML"

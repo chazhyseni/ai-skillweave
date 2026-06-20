@@ -23,15 +23,24 @@ Ollama silently truncates prompts to its `num_ctx` limit — no error, skills si
 
 ## Skills not appearing in Copilot CLI
 
-Copilot CLI natively discovers `SKILL.md` files from `~/.claude/skills/` at startup. If no skills appear:
+Copilot CLI bridges the cross-harness skill pool via `scripts/setup-copilot-skills.sh`. The bridge installs:
+  - A symlink `~/.copilot/config/skills -> ~/.claude/skills` (native Copilot path)
+  - The env-var `COPILOT_SKILLS_DIRS=~/.claude/skills:~/.pi/agent/skills` in your shell rc
+  - An updated `_copilot_with_skills()` wrapper that sets the env-var inline as a fallback
 
-1. Verify skills are installed: `ls ~/.claude/skills/ | wc -l` (should be 300+)
-2. Re-run skills install: `./install.sh --only skills`
-3. Restart Copilot
+If no skills appear in Copilot:
+
+1. **Check the bridge is installed:** `scripts/setup-copilot-skills.sh --check` — all three checks should pass.
+2. **Verify skills are installed:** `ls ~/.claude/skills/ | wc -l` (should be 300+, or 1000+ for the full library).
+3. **Re-run the skills install:** `./install.sh --only skills` then re-run `scripts/setup-copilot-skills.sh`.
+4. **Reload your shell** so the env-var export takes effect: `source ~/.bashrc` (or `~/.zshrc`).
+5. **Restart Copilot** so it re-discovers skills on launch.
 
 To disable a specific skill: add its name to `disabledSkills` in `~/.copilot/settings.json`.
 
-To add extra skill directories: set `COPILOT_SKILLS_DIRS=/path/to/skills` in your shell rc.
+To add extra skill directories beyond what the bridge provides: set `COPILOT_SKILLS_DIRS=/path/to/skills` in your shell rc (the bridge will use this in place of the default if set).
+
+To remove the bridge entirely: `scripts/setup-copilot-skills.sh --unlink`.
 
 ---
 

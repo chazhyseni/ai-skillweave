@@ -587,7 +587,6 @@ _copilot_with_skills() {
     # The explicit env-var export below guarantees Copilot finds the cross-harness
     # skill pool without requiring a shell reload, mirroring the same fallback
     # pattern used by _codex_with_skills, _pi_with_skills, etc.
-    # This wrapper is otherwise a passthrough for env-var cleanup.
     (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT
      if [ -z "${COPILOT_SKILLS_DIRS:-}" ]; then
          # Build a sensible default only if the env-var wasn't already set

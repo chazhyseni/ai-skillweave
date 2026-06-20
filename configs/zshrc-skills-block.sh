@@ -43,13 +43,22 @@ _pi_with_skills() {
     (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command pi "$@")
 }
 
-# Copilot CLI: loads SKILL.md files natively from ~/.claude/skills/ as "personal-claude" source.
-# No prompt injection needed — Copilot discovers them at startup via built-in skill discovery.
-# Also reads .github/skills, .agents/skills, ~/.copilot/config/skills, ~/.agents/skills.
-# Use COPILOT_SKILLS_DIRS env var to add extra skill directories.
-# This wrapper is a passthrough for env cleanup only.
+# Copilot CLI: bridges the cross-harness skill pool via setup-copilot-skills.sh.
+# Without the bridge, Copilot only sees skills in ~/.claude/skills/ (read as
+# "personal-claude"). With the bridge installed, Copilot also finds skills
+# via ~/.copilot/config/skills (symlinked to ~/.claude/skills) and via
+# COPILOT_SKILLS_DIRS, which the wrapper below populates as a fallback if
+# the env-var wasn't set by the shell rc.
+# The bridge also handles Pi skills (auto-discovery) for full coverage.
 _copilot_with_skills() {
-    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command copilot "$@")
+    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT
+     if [ -z "${COPILOT_SKILLS_DIRS:-}" ]; then
+         local _dirs=""
+         [ -d "$HOME/.claude/skills" ] && _dirs="$HOME/.claude/skills"
+         [ -d "$HOME/.pi/agent/skills" ] && _dirs="${_dirs:+$_dirs:}$HOME/.pi/agent/skills"
+         [ -n "$_dirs" ] && export COPILOT_SKILLS_DIRS="$_dirs"
+     fi
+     command copilot "$@")
 }
 
 # Cross-harness skill learner

@@ -290,7 +290,7 @@ npm install -g @openai/codex
 
 > **Note:** OpenClaw, Pi, Codex, and Copilot are optional. `install.sh` will skip harnesses that aren't installed and show a warning. Ollama is also optional — the installer warns but continues without it.
 >
-> **Copilot CLI:** Copilot natively discovers SKILL.md files from `~/.claude/skills/` as its `personal-claude` source — no injection wrapper needed. It also reads `.github/skills`, `.agents/skills`, `~/.copilot/config/skills`, and `~/.agents/skills`. The `scripts/setup-copilot-skills.sh` bridge additionally symlinks `~/.copilot/config/skills -> ~/.claude/skills` (zero-duplication native path) and exports `COPILOT_SKILLS_DIRS="$HOME/.claude/skills:$HOME/.pi/agent/skills"` for the in-process skill loader, so Copilot sees the full cross-harness pool without manual config. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`.
+> **Copilot CLI:** `scripts/setup-copilot-skills.sh` bridges Copilot to the cross-harness skill pool. It installs a `~/.copilot/config/skills -> ~/.claude/skills` symlink (zero-duplication, native Copilot path), exports `COPILOT_SKILLS_DIRS="$HOME/.claude/skills:$HOME/.pi/agent/skills"` in your shell rc, and refreshes the `_copilot_with_skills()` wrapper inline. Copilot's own loader also reads `~/.claude/skills/` directly as `personal-claude` — that path is the fallback if the bridge is not installed. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`.
 
 ### 6. Install Python 3
 
