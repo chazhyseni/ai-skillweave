@@ -185,6 +185,7 @@ ai-skillweave/
 │   ├── setup-codex.sh            ← Apply Codex config
 │   ├── setup-pi.sh               ← Apply Pi settings
 │   ├── setup-copilot.sh          ← Apply Copilot CLI MCP config
+│   ├── setup-copilot-skills.sh   ← Bridge Copilot CLI to the cross-harness skill pool (symlink + COPILOT_SKILLS_DIRS)
 │   ├── setup-ollama-config.sh    ← Apply Ollama integration→model mapping
 │   ├── update-ecc.sh             ← Pull latest ECC + rebuild cache + learn-sync + re-sync harnesses
 │   ├── disable-zscaler.sh        ← Disable Zscaler proxy
@@ -289,7 +290,7 @@ npm install -g @openai/codex
 
 > **Note:** OpenClaw, Pi, Codex, and Copilot are optional. `install.sh` will skip harnesses that aren't installed and show a warning. Ollama is also optional — the installer warns but continues without it.
 >
-> **Copilot CLI:** Copilot natively discovers SKILL.md files from `~/.claude/skills/` as its `personal-claude` source — no injection wrapper needed. It also reads `.github/skills`, `.agents/skills`, `~/.copilot/config/skills`, and `~/.agents/skills`. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`.
+> **Copilot CLI:** Copilot natively discovers SKILL.md files from `~/.claude/skills/` as its `personal-claude` source — no injection wrapper needed. It also reads `.github/skills`, `.agents/skills`, `~/.copilot/config/skills`, and `~/.agents/skills`. The `scripts/setup-copilot-skills.sh` bridge additionally symlinks `~/.copilot/config/skills -> ~/.claude/skills` (zero-duplication native path) and exports `COPILOT_SKILLS_DIRS="$HOME/.claude/skills:$HOME/.pi/agent/skills"` for the in-process skill loader, so Copilot sees the full cross-harness pool without manual config. MCP servers (including beads) are configured in `~/.copilot/mcp-config.json` via `scripts/setup-copilot.sh`.
 
 ### 6. Install Python 3
 
@@ -433,10 +434,10 @@ All harnesses receive the same ~900 skills. They differ only in how skills are d
 | Harness | How skills are delivered |
 |---------|--------------------------|
 | `claude` / `ollama launch claude` | Native `~/.claude/skills/` — loaded on demand via `/skills`. Learned skills also injected via `lean-skills.txt` (~1-2K tokens) at launch. |
-| `copilot` (Copilot CLI) | Native discovery from `~/.claude/skills/` as `personal-claude` source — no wrapper needed. Also reads `.github/skills`, `~/.copilot/config/skills`. |
-| `ollama launch openclaw` | YAML-sanitized copies in `~/.openclaw/workspace/skills/` |
-| `ollama launch pi` | Symlinks in `~/.pi/agent/skills/` |
-| `ollama launch codex` | YAML-sanitized copies in `~/.codex/skills/` (names truncated to 64 chars) + 5 Codex built-in system skills |
+| `copilot` (Copilot CLI) | **Bridged** by `setup-copilot-skills.sh`: `~/.copilot/config/skills -> ~/.claude/skills` symlink + `COPILOT_SKILLS_DIRS` export pointing at Claude and Pi skill dirs. Copilot's own loader also reads `~/.claude/skills/` directly as `personal-claude`. |
+| `ollama launch openclaw` | YAML-sanitized copies in `~/.openclaw/workspace/skills/`. **Note:** OpenClaw also has a `skills.entries` section in `~/.openclaw/openclaw.json` for built-in harness-native skills (e.g. obsidian, himalaya, openhue, oracle). The ai-skillweave pipeline does **not** populate `entries` — it uses the workspace dir instead, because workspace skills are loaded automatically while registered entries are opt-in. |
+| `ollama launch pi` | Symlinks in `~/.pi/agent/skills/`. Pi also auto-discovers `~/.agents/skills/` (Agent Skills spec standard path) if you create it. |
+| `ollama launch codex` | YAML-sanitized copies in `~/.codex/skills/` (directory names truncated to 64 chars) + 5 Codex built-in system skills. **Update-ecc.sh pre-flight warns** on any skill name > 64 chars so cross-harness equivalence is preserved (the `name:` field in SKILL.md is never rewritten). |
 
 Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
