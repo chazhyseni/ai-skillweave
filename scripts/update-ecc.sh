@@ -566,11 +566,20 @@ if os.path.isdir(os.path.join(home, ".claude")):
         dst_dir = os.path.join(claude_skills, skill_name)
         dst = os.path.join(dst_dir, "SKILL.md")
         src_mtime = os.path.getmtime(src)
-        dst_mtime = os.path.getmtime(dst) if os.path.exists(dst) else 0
-        if src_mtime > dst_mtime:
-            os.makedirs(dst_dir, exist_ok=True)
+        # Check if dst_dir exists as a symlink (from cross-harness linking)
+        if os.path.islink(dst_dir):
+            # Symlink exists — copy SKILL.md into the symlinked directory
+            if os.path.exists(dst) and src_mtime <= os.path.getmtime(dst):
+                continue  # Already up to date
             shutil.copy2(src, dst)
             claude_updated += 1
+            continue
+        # Regular directory case
+        if os.path.exists(dst) and src_mtime <= os.path.getmtime(dst):
+            continue  # Already up to date
+        os.makedirs(dst_dir, exist_ok=True)
+        shutil.copy2(src, dst)
+        claude_updated += 1
     # Also sync learned skills (flat .md in learned/ subdir — leave as-is)
     claude_total = len([d for d in os.listdir(claude_skills)
                         if os.path.isdir(os.path.join(claude_skills, d)) and d != "learned"])
