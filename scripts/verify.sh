@@ -216,6 +216,30 @@ else
     warn "~/.codex/config.toml not found"
 fi
 
+# Codex has a 64-char directory-name limit. update-ecc.sh's pre-flight warns
+# on any source skill whose name exceeds this; verify.sh surfaces the current
+# state so operators can see at a glance which skills would be truncated.
+if [ -d "$HOME/.codex/skills" ]; then
+    CODEX_OVER_64=0
+    while IFS= read -r -d '' skilldir; do
+        n=$(basename "$skilldir")
+        if [ "${#n}" -gt 64 ]; then
+            CODEX_OVER_64=$((CODEX_OVER_64 + 1))
+        fi
+    done < <(find "$HOME/.codex/skills" -maxdepth 1 -mindepth 1 -type d -print0 2>/dev/null)
+    if [ "$CODEX_OVER_64" -gt 0 ] 2>/dev/null; then
+        warn "Codex: $CODEX_OVER_64 skill(s) in ~/.codex/skills/ have directory names > 64 chars (truncated by update-ecc.sh — SKILL.md name: field preserved)"
+    fi
+    # Also check source skills (not the installed copies) to catch upstream drift
+    ECC_DIR="$HOME/.claude-everything-claude-code"
+    if [ -d "$ECC_DIR/skills" ]; then
+        SRC_OVER_64=$(find "$ECC_DIR/skills" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | awk 'length($0) > 64' | wc -l | tr -d ' ')
+        if [ "${SRC_OVER_64:-0}" -gt 0 ] 2>/dev/null; then
+            warn "Codex preflight: $SRC_OVER_64 upstream skill(s) in ECC exceed 64 chars — update-ecc.sh will emit a warning on next run"
+        fi
+    fi
+fi
+
 # ── Skills Layer ──
 section "Shell Skills Layer"
 
@@ -277,7 +301,34 @@ else
     fi
 fi
 
-# Copilot natively loads SKILL.md files from ~/.claude/skills/
+# Copilot skill bridge — checks the symlink and env-var that
+# setup-copilot-skills.sh installs. These are the two channels Copilot CLI
+# uses for cross-harness skill delivery.
+COPILOT_BRIDGE_OK=true
+COPILOT_SKILLS_LINK="$HOME/.copilot/config/skills"
+if [ -L "$COPILOT_SKILLS_LINK" ] && [ "$(readlink "$COPILOT_SKILLS_LINK")" = "$HOME/.claude/skills" ]; then
+    ok "Copilot skill bridge: symlink $COPILOT_SKILLS_LINK -> ~/.claude/skills"
+else
+    warn "Copilot skill bridge: no symlink at $COPILOT_SKILLS_LINK (Copilot will fall back to direct ~/.claude/skills read)"
+    COPILOT_BRIDGE_OK=false
+fi
+# Check COPILOT_SKILLS_DIRS export in current shell rc (bash or zsh)
+DETECTED_RC=""
+[ -f "$HOME/.bashrc" ] && DETECTED_RC="$HOME/.bashrc"
+[ -f "$HOME/.zshrc" ] && [ -z "$DETECTED_RC" ] && DETECTED_RC="$HOME/.zshrc"
+if [ -n "$DETECTED_RC" ] && grep -qE '^export COPILOT_SKILLS_DIRS=' "$DETECTED_RC" 2>/dev/null; then
+    ok "COPILOT_SKILLS_DIRS export found in $DETECTED_RC"
+else
+    warn "COPILOT_SKILLS_DIRS not exported in shell rc (run: scripts/setup-copilot-skills.sh)"
+    COPILOT_BRIDGE_OK=false
+fi
+if ! $COPILOT_BRIDGE_OK && $FIX; then
+    echo "    → Running setup-copilot-skills.sh to repair the bridge..."
+    "$REPO_DIR/scripts/setup-copilot-skills.sh" && ok "Fixed: Copilot skill bridge installed"
+fi
+
+# Copilot natively loads SKILL.md files from ~/.claude/skills/ as 'personal-claude',
+# plus whatever COPILOT_SKILLS_DIRS points at. Count what the bridge exposes.
 SKILL_MD_COUNT=$(find "$HOME/.claude/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$SKILL_MD_COUNT" -gt 0 ] 2>/dev/null; then
     ok "~/.claude/skills: $SKILL_MD_COUNT SKILL.md files (loaded natively by Copilot as 'personal-claude')"

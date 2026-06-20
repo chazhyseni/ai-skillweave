@@ -9,6 +9,9 @@
 #   1. git pull on ~/.claude-everything-claude-code
 #   2. Rebuilds ~/.claude/skills-cache/combined-skills.txt
 #   3. Re-syncs skills to all harness native directories (openclaw, pi, codex)
+#      - Codex: pre-flight warns on any skill name > 64 chars; directory is
+#        truncated as a defensive fallback but SKILL.md name: field is NEVER
+#        rewritten (preserves cross-harness equivalence).
 #   4. Runs the learning pipeline to extract/refresh learned skills
 #
 # Usage:
@@ -424,36 +427,55 @@ def sync_to_harness_real(skill_name, skill_dir, dest_dir):
         return True
     return False
 
+# Codex has a 64-char limit on skill directory names. Truncation would normally
+# require rewriting the `name:` field in the SKILL.md frontmatter to match, but
+# that breaks cross-harness equivalence (claude, pi, openclaw all see the
+# original name; codex would see a different one). Instead we fail loud at the
+# pre-flight check (see _preflight_codex_names below) so the offending skill is
+# renamed upstream. As a defensive fallback we still truncate the *directory*
+# name here so the skill installs in codex with a usable path — but the SKILL.md
+# frontmatter is left untouched.
 def sync_to_harness_symlink_or_sanitize(skill_name, skill_dir, dest_dir):
     """Sync a skill to harness: symlink if clean YAML, sanitized copy if not.
-    
-    For Codex: truncates skill name to 64 chars (Codex limit) and updates
-    the name field inside SKILL.md to match.
+
+    For Codex: truncates directory name to 64 chars (Codex limit) but NEVER
+    rewrites the `name:` field inside SKILL.md — that would break cross-harness
+    equivalence. Pre-flight verification catches over-64 names so this fallback
+    should never fire in practice.
     """
     src = os.path.join(skill_dir, "SKILL.md")
     if not os.path.exists(src):
         return False
-    
-    # Codex has 64-char limit on skill names
+
+    # Codex has 64-char limit on skill directory names
     codex_name = skill_name[:64].rstrip("-")
     dst_path = os.path.join(dest_dir, codex_name)
-    
+
     if not os.path.exists(dst_path):
         if needs_sanitize(src):
             os.makedirs(dst_path, exist_ok=True)
+            # NOTE: deliberately NOT rewriting the `name:` field. The skill
+            # keeps its original name in SKILL.md even if the directory is
+            # truncated — this preserves cross-harness equivalence.
             content = sanitize_skill_md(src)
-            # Update name field to match truncated directory name
-            lines = content.splitlines()
-            for i, line in enumerate(lines):
-                if line.startswith("name: "):
-                    lines[i] = f"name: {codex_name}"
-                    break
             with open(os.path.join(dst_path, "SKILL.md"), "w") as f:
-                f.write("\n".join(lines) + "\n")
+                f.write(content)
         else:
             os.symlink(skill_dir, dst_path)
         return True
     return False
+
+
+# Pre-flight: list any skills whose names would trigger codex truncation. This
+# is informational (not a hard error) so installs continue, but it surfaces the
+# latent bug to the user/operator before silent truncation happens.
+def _preflight_codex_names(all_skills_map):
+    over = [(n, p) for n, p in all_skills_map.items() if len(n) > 64]
+    if over:
+        print("\033[1;33m[ECC][WARN]\033[0m {} skill(s) exceed Codex's 64-char directory name limit:".format(len(over)))
+        for n, p in over:
+            print("\033[1;33m[ECC][WARN]\033[0m   - {!r} ({} chars) — directory will be truncated, SKILL.md name: field preserved".format(n, len(n)))
+    return len(over)
 
 # --- OpenClaw: real file copies (sanitized) for all skill sources ---
 if os.path.isdir(os.path.join(home, ".openclaw", "workspace")):
@@ -477,6 +499,9 @@ if os.path.isdir(os.path.join(home, ".pi", "agent")):
     stats["pi"]["total"] = len(os.listdir(pi_skills))
 
 # --- Codex: symlinks where clean, sanitized copies where needed ---
+# Pre-flight: warn (but don't fail) about any over-64-char names so the user
+# knows which skills will be silently directory-truncated.
+_preflight_codex_names(all_skills)
 if os.path.isdir(os.path.join(home, ".codex")):
     os.makedirs(codex_skills, exist_ok=True)
     for skill_name, skill_dir in all_skills.items():
