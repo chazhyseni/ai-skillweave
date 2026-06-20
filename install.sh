@@ -232,6 +232,22 @@ command -v python3 >/dev/null 2>&1 || error "python3 required ($PKG_HINT python3
 log "Installing Python dependencies for skill extraction (sentence-transformers, scikit-learn)..."
 _install_python_deps() {
     local pkgs="sentence-transformers>=3.0.0 scikit-learn>=1.5.0"
+    
+    # Prefer uv (fast, handles venv automatically, avoids PEP 668 issues)
+    if command -v uv >/dev/null 2>&1; then
+        log "Using uv for Python deps (PEP 668-safe)..."
+        # Create/update .venv in repo root if it doesn't exist
+        if [ ! -d "$REPO_DIR/.venv" ]; then
+            uv venv "$REPO_DIR/.venv" 2>&1 || true
+        fi
+        # Install into the venv
+        if uv pip install --python "$REPO_DIR/.venv/bin/python" --quiet $pkgs 2>&1; then
+            success "Python deps installed via uv"
+            return 0
+        fi
+        warn "uv pip install failed — falling back to pip"
+    fi
+    
     # Detect virtualenv: --user is forbidden inside venv/conda
     local in_venv=""
     if python3 -c "import sys; sys.exit(0 if (sys.prefix != sys.base_prefix) else 1)" 2>/dev/null; then

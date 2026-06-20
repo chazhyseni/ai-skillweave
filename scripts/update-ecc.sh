@@ -418,6 +418,12 @@ def sync_to_harness_real(skill_name, skill_dir, dest_dir):
     src_mtime = os.path.getmtime(src)
     dst_mtime = os.path.getmtime(dst) if os.path.exists(dst) else 0
     if src_mtime > dst_mtime:
+        # Handle case where dst_dir exists as a file (broken previous install)
+        if os.path.exists(dst_dir) and not os.path.isdir(dst_dir):
+            try:
+                os.remove(dst_dir)
+            except OSError:
+                return False
         os.makedirs(dst_dir, exist_ok=True)
         if needs_sanitize(src):
             with open(dst, "w") as f:
