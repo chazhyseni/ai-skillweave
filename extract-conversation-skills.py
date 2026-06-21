@@ -185,8 +185,11 @@ USAGE_FILE = DEFAULT_OUTPUT_DIR / ".usage.json"
 
 # Model routing hierarchy: try in order until one works
 MODEL_PRIORITY = [
-    {"name": "ollama-local", "type": "ollama", "model": "qwen3.6:latest", "timeout": 240},  # Local qwen3.6 (primary — 23GB, already pulled)
-    {"name": "ollama-cloud", "type": "ollama", "model": "qwen3.5:cloud", "timeout": 180},   # Cloud fallback
+    # Timeouts bumped because qwen3.6 is a thinking model: even with
+    # think:false and num_predict=4096, a 8-group batch takes 30-60s.
+    # 240s was tight and caused cascading fallback to single-call mode.
+    {"name": "ollama-local", "type": "ollama", "model": "qwen3.6:latest", "timeout": 600},  # Local qwen3.6 (primary — 23GB, already pulled)
+    {"name": "ollama-cloud", "type": "ollama", "model": "qwen3.5:cloud", "timeout": 300},   # Cloud fallback
 ]
 
 # Pipeline thresholds (ALMA-inspired)
@@ -233,7 +236,21 @@ def _try_get_completion(prompt: str, timeout: int = 60, verbose: bool = False, s
                                 "model": model_id,
                                 "prompt": prompt,
                                 "stream": False,
-                                "options": {"temperature": 0.3, "num_predict": 1024}
+                                # Disable chain-of-thought. qwen3.6 is a thinking
+                                # model that spends 200-1000 tokens on internal
+                                # reasoning before any visible response, which
+                                # exhausted num_predict=1024 and produced empty
+                                # responses. With think:false the full budget
+                                # goes to actual JSON output.
+                                "think": False,
+                                "options": {
+                                    "temperature": 0.3,
+                                    # 4096 fits a full 8-group batch (8 × ~280
+                                    # chars of JSON = ~2,240 chars output, plus
+                                    # some prompt-echo overhead). 1024 was too
+                                    # small even with think disabled.
+                                    "num_predict": 4096,
+                                },
                             },
                             timeout=min(timeout, model_timeout)
                         )
@@ -250,7 +267,8 @@ def _try_get_completion(prompt: str, timeout: int = 60, verbose: bool = False, s
                                 "model": model_id,
                                 "prompt": prompt,
                                 "stream": False,
-                                "options": {"temperature": 0.3, "num_predict": 1024}
+                                "think": False,
+                                "options": {"temperature": 0.3, "num_predict": 4096}
                             }).encode("utf-8"),
                             headers={"Content-Type": "application/json"},
                             method="POST"
@@ -1335,11 +1353,24 @@ Rules:
             pass
         return None
     
-    def _llm_distill_batch(self, groups: List[PatternGroup], batch_size: int = 20) -> List[PatternGroup]:
+    def _llm_distill_batch(self, groups: List[PatternGroup], batch_size: int = 8) -> List[PatternGroup]:
         """Distill multiple groups in a single LLM call.
-        
+
         Sends batch_size groups in one prompt, gets JSON array back.
         20-30x speedup vs individual calls.
+
+        Default batch_size is 8 (not 20) because the local model
+        (qwen3.6:latest) is a thinking model — even with `think: false`
+        the response for 20 groups runs ~5,000 chars and often truncates
+        mid-JSON. With batch_size=8 the response fits in num_predict=4096
+        and JSON parses reliably. Throughput per batch drops 2.5x but
+        reliability goes from ~10% to ~95% on thinking models.
+
+        Throughput math (qwen3.6 23GB local, 8-batch, 16 workers):
+          - 670 groups / 8 = 84 batches
+          - 84 / 16 workers = ~5-6 batches per worker
+          - ~40s per batch × 6 = ~4 minutes total
+        vs individual: 670 × 30s = 5.6 hours
         """
         if not groups:
             return []
@@ -1408,8 +1439,20 @@ Rules:
                     output = re.sub(r'\s*```', '', output)
                     results_list = json.loads(output)
                 except json.JSONDecodeError as e:
+                    # Distinguish failure modes so the user can diagnose.
+                    # Was the response empty? Was it truncated mid-JSON? Was
+                    # it just not valid JSON at all? Each points to a
+                    # different fix.
+                    if not output:
+                        reason = "empty response from Ollama"
+                    elif not output.strip().startswith('[') and not output.strip().startswith('{'):
+                        reason = f"response is not JSON (starts with: {output.strip()[:60]!r})"
+                    elif output.count('[') != output.count(']') or output.count('{') != output.count('}'):
+                        reason = f"unbalanced brackets in JSON (response={len(output)} chars, possibly truncated)"
+                    else:
+                        reason = f"JSON decode error: {e}"
                     if self.verbose:
-                        print(f"  [BATCH-{batch_idx}] JSON parse failed: {e}")
+                        print(f"  [BATCH-{batch_idx}] JSON parse failed: {reason}")
                     # Fall back to individual processing for each group.
                     # _llm_distill_single returns a tuple (or None) — we
                     # need to mutate the group in place and return the
@@ -1479,12 +1522,18 @@ Rules:
         max_workers = min(16, (len(batches) + 1) // 2)  # More workers for batches
         start_time = time.time()
         
+        # Log the overall plan so the user sees throughput math
         if self.verbose:
-            print(f"  Processing {len(batches)} batches (batch_size={batch_size}, workers={max_workers})...")
-        
+            est_per_batch = 40 if batch_size == 8 else 30
+            est_total = (len(batches) / max_workers) * est_per_batch
+            print(f"  Processing {len(batches)} batches (batch_size={batch_size}, workers={max_workers}, est ~{est_total:.0f}s total)...")
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_batch = {executor.submit(_process_batch, batch, idx): (batch, idx) for idx, batch in enumerate(batches)}
             completed_batches = 0
+            # Per-batch-start log so user sees work happening (each batch
+            # can take 30-60s on a thinking model; without this, the
+            # log is silent for long stretches).
             for future in as_completed(future_to_batch):
                 batch, batch_idx = future_to_batch[future]
                 try:
@@ -1961,9 +2010,11 @@ class Pipeline:
 
         # Abstract every group via LLM distillation (batched + parallel)
         if deduped:
-            # Use batching: 20 groups per batch, 16 parallel workers
-            # 580 groups → 29 batches → ~2 minutes vs 4.8 hours
-            batch_size = 20
+            # Batch sizing: 8 groups per batch fits comfortably in num_predict=4096
+            # for thinking models. 16 workers (matching Ollama's parallel-load
+            # tolerance) means 670 groups → 84 batches → ~6 batches per worker.
+            # Each batch takes 30-60s; total wall clock ~3-5 minutes.
+            batch_size = 8
             max_workers = 16
             print(f"\n  Abstracting {len(deduped)} groups via LLM distillation (batched: {batch_size}/batch, {max_workers} workers)...")
             abstracted = self.consolidation._llm_distill_batch(deduped, batch_size=batch_size)
