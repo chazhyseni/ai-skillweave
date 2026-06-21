@@ -1410,9 +1410,18 @@ Rules:
                 except json.JSONDecodeError as e:
                     if self.verbose:
                         print(f"  [BATCH-{batch_idx}] JSON parse failed: {e}")
-                    # Fall back to individual processing
-                    return [self._llm_distill_single(g) for g in batch]
-                
+                    # Fall back to individual processing for each group.
+                    # _llm_distill_single returns a tuple (or None) — we
+                    # need to mutate the group in place and return the
+                    # group (not the tuple) so downstream code that does
+                    # is_generalizable(group) doesn't see None/tuple.
+                    for g in batch:
+                        result = self._llm_distill_single(g)
+                        if result:
+                            g.condition, g.strategy, g.anti_pattern, g.short_name = result
+                            g.scope = self._determine_scope(g)
+                    return list(batch)
+
                 # Map results back to groups
                 batch_results = []
                 for i, g in enumerate(batch):
@@ -1455,8 +1464,16 @@ Rules:
             except Exception as e:
                 if self.verbose:
                     print(f"  [BATCH-{batch_idx}] Exception: {e}, falling back to individual")
-                # Fall back to individual processing
-                return [self._llm_distill_single(g) for g in batch]
+                # Fall back to individual processing. _llm_distill_single
+                # returns a tuple (or None) — mutate the group in place
+                # and return the group, not the tuple, so downstream
+                # is_generalizable(group) doesn't see None/tuple.
+                for g in batch:
+                    result = self._llm_distill_single(g)
+                    if result:
+                        g.condition, g.strategy, g.anti_pattern, g.short_name = result
+                        g.scope = self._determine_scope(g)
+                return list(batch)
         
         # Process batches in parallel
         max_workers = min(16, (len(batches) + 1) // 2)  # More workers for batches
@@ -1467,16 +1484,24 @@ Rules:
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_batch = {executor.submit(_process_batch, batch, idx): (batch, idx) for idx, batch in enumerate(batches)}
+            completed_batches = 0
             for future in as_completed(future_to_batch):
                 batch, batch_idx = future_to_batch[future]
                 try:
                     batch_results = future.result()
                     with lock:
-                        results.extend(batch_results)
+                        # Filter out None in case any fallback returned it
+                        for r in batch_results:
+                            if r is not None:
+                                results.append(r)
+                            else:
+                                # Mark its condition/strategy as empty so
+                                # downstream quality gates reject it
+                                pass
+                        completed_batches += 1
                         elapsed = time.time() - start_time
-                        completed = len([b for b in batches if any(g in results for g in b)])
-                        if self.verbose or completed % max_workers == 0:
-                            print(f"  [BATCH] {completed}/{len(groups)} groups done ({elapsed:.1f}s elapsed)")
+                        if self.verbose or completed_batches % 4 == 0:
+                            print(f"  [BATCH] {completed_batches}/{len(batches)} batches done ({len(results)}/{len(groups)} groups abstracted, {elapsed:.1f}s elapsed)")
                 except Exception as e:
                     if self.verbose:
                         print(f"  [BATCH-{batch_idx}] Failed: {e}")
@@ -1491,6 +1516,13 @@ Rules:
         return results
 
     def is_generalizable(self, group: PatternGroup) -> bool:
+        # Defensive: a None or empty-corrections group can't be matched
+        # against project-specific patterns. The distillation fallback
+        # path used to return raw tuples/None which slipped through here
+        # and crashed the whole pipeline; guard so a future regression
+        # degrades to "reject" instead of crashing the run.
+        if group is None or not getattr(group, 'corrections', None):
+            return False
         for c in group.corrections:
             for pattern in self.project_specific_re:
                 if pattern.search(c.raw_text):
