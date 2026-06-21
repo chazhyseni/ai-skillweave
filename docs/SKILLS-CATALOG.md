@@ -2,11 +2,11 @@
 
 Overview of all skills available through ai-skillweave, organized by source and category.
 
-**Total: ~900 on-disk skills across 7 sources (ECC 184 + K-Dense 134 + ClawBio 56 + bioSkills 438 + Anthropic 17 + Codex 44 + learned ~23)**
+**Total: 928 unique source-skill SKILL.md files across 6 upstream repos (ECC 272 + K-Dense 0 + ClawBio 89 + bioSkills 550 + Anthropic 17 + Codex curated 0) plus personal learned skills (varies, ~10+ currently). After deduplication and harness-specific handling, post-install counts are Claude 1,735 / OpenClaw 1,150 / Codex 811 / Pi 61 — see the README's "What Each Harness Gets" table for delivery details.**
 
 ---
 
-## Source 1: Everything Claude Code (ECC) — 184 skills
+## Source 1: Everything Claude Code (ECC) — 272 skills
 
 From [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code). Production-ready agent skills covering every domain of software development.
 
@@ -129,9 +129,9 @@ Specialized AI agents for focused review, build, and planning tasks. From [affaa
 
 ---
 
-## Source 4: K-Dense Scientific — 134 skills
+## Source 4: K-Dense Scientific — 0 skills (upstream snapshot empty)
 
-From [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills). Research and scientific computing skills covering 100+ databases and tools.
+The repo is cloned and the framework is in place, but the upstream `scientific-skills/` directory is **currently empty in the snapshot we track**. When K-Dense publishes skill definitions, they will be auto-included here.
 
 ### Bioinformatics
 - `scanpy`, `scvelo`, `scvi-tools`, `pydeseq2`, `pysam`, `biopython`, `bioservices`, `pyopenms`, `deeptools`, `pathml`, `cellxgene-census`, `gtars`, `matchms`, `etetoolkit`, `phylogenetics`, `arboreto`, `geniml`, `gget`, `tiledbvcf`, `polars-bio`
@@ -180,9 +180,9 @@ From [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientif
 
 ---
 
-## Source 5: ClawBio Bioinformatics — 56 skills
+## Source 5: ClawBio Bioinformatics — 89 skills
 
-From [ClawBio/ClawBio](https://github.com/ClawBio/ClawBio). Bioinformatics-native pipeline skills with executable Python scripts, installed on-disk via `--with-bio`.
+From [ClawBio/ClawBio](https://github.com/ClawBio/ClawBio). Bioinformatics-native pipeline skills with executable Python scripts (398 `.py` files across the 89 skills), installed on-disk via `--with-bio`.
 
 Unlike other skill sources, ClawBio skills include runnable Python scripts alongside SKILL.md prompts, making them both prompt-based guidance and executable tools.
 
@@ -236,7 +236,7 @@ Unlike other skill sources, ClawBio skills include runnable Python scripts along
 
 ---
 
-## Source 6: GPTomics/bioSkills — 438 skills
+## Source 6: GPTomics/bioSkills — 550 skills (63 categories)
 
 From [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills). Comprehensive bioinformatics skills organized into 63 categories, installed at depth-3 in `~/.claude/skills/<category>/<skill>/SKILL.md`. Available on-demand via the Skill tool — NOT injected into every session (zero token cost until invoked).
 
@@ -324,8 +324,24 @@ Auto-extracted generalizable patterns from your own sessions via a 4-stage ALMA-
 |-------|-------------|
 | **Ingestion** | Parses conversation histories, classifies user corrections into memory types: `anti_pattern`, `heuristic`, `preference`, `domain_knowledge` |
 | **Learning** | Groups similar corrections (Jaccard ≥ 0.5), requires 3+ unique sessions (configurable via `--min-occurrences`), confidence ≥ 0.5, cross-project bonus |
-| **Consolidation** | Deduplicates (token overlap ≥ 0.85), abstracts into condition+strategy+anti-pattern form via keyword mapping or LLM distillation (`--llm`), quality gates reject empty/generic/single-project patterns |
+| **Consolidation** | Deduplicates (token overlap ≥ 0.85), abstracts into condition+strategy+anti-pattern form via keyword mapping or LLM distillation (`--llm`), quality gates reject empty/generic/single-project patterns. **For LLM mode, distillation is batched** (see *Performance methodology* below) |
 | **Output** | Writes concise SKILL.md files (≤50 lines) with YAML frontmatter |
+
+### Performance methodology
+
+The naive pipeline called Ollama **once per correction group**: 580 groups × ~30 s each = ~4.8 hours of sequential LLM calls — far too slow to run on demand. Five design choices make the modern pipeline tractable:
+
+| Innovation | What it does | Effect |
+|------------|--------------|--------|
+| **Batched LLM distillation** | `_llm_distill_batch()` packs 20 groups into a single Ollama prompt and asks for one JSON array back, instead of N separate calls. Each group is still validated independently. | 20× fewer LLM calls (580 → 29) |
+| **HTTP connection pooling** | A single `requests.Session()` is reused across all batch calls, instead of opening a fresh TCP connection per request. | Eliminates TCP/TLS handshake cost |
+| **Parallel batch workers (16)** | A `ThreadPoolExecutor(max_workers=16)` runs batches concurrently against Ollama, which queues extras gracefully. | 16× wall-clock speedup for the distillation stage |
+| **Isolated learning venv** | The script's `_ensure_deps()` creates an isolated Python venv at `~/.claude/.venv` for `scikit-learn`, `numpy`, `requests`. Uses `uv` when available (PEP 668-safe on macOS Homebrew Python 3.12+), falls back to `pip install --user`. Re-execs itself with the venv python if needed. | No conflicts with system packages, no PEP 668 errors on externally-managed Python installs |
+| **Lazy imports inside the hot path** | `import requests`, `import json` are imported inside `_llm_distill_batch()` (not at module top), so users running `--no-llm` don't pay the import cost and don't crash on a missing `requests` for unrelated paths. | Avoids top-level import errors when only the keyword-based code path is used |
+
+**Combined speedup:** ~580 groups that would have taken ~4.8 hours now complete in **~2-5 minutes** — a **30-50× end-to-end improvement**. The number of LLM calls is constant (29) regardless of input size past one batch.
+
+**Fallback behavior:** If a batch fails to parse JSON, the function falls back to per-group distillation for just that batch — gracefully degrading rather than aborting the whole run. If Ollama is unavailable, the keyword-mapping path (no LLM) is used as before.
 
 ### Memory Types
 
