@@ -65,20 +65,49 @@ def _ensure_deps(verbose: bool = False):
     to Jaccard clustering if unavailable.
 
     Uses uv when available (avoids PEP 668 externally-managed-environment errors).
+    Prefers repo's .venv if it exists.
     """
     import subprocess, sys
     
-    # Prefer uv (handles PEP 668 automatically)
+    # Check if already installed (might be running from venv)
+    try:
+        import sklearn
+        import numpy
+        if verbose:
+            print(f"  [DEPS] Already available: scikit-learn={sklearn.__version__}, numpy={numpy.__version__}")
+        return True
+    except ImportError:
+        pass
+    
+    # Prefer repo's .venv if it exists (ai-skillweave or parent dir)
+    script_dir = Path(__file__).parent
+    for venv_rel in [".venv", "../.venv", "../../.venv"]:
+        venv_python = (script_dir / venv_rel / "bin" / "python").resolve()
+        if venv_python.exists():
+            try:
+                result = subprocess.run(
+                    [str(venv_python), "-c", "import sklearn, numpy; print('OK')"],
+                    capture_output=True, text=True, timeout=10
+                )
+                if result.returncode == 0:
+                    if verbose:
+                        print(f"  [DEPS] Using venv: {venv_python}")
+                    # Re-run this script with the venv python
+                    os.execv(str(venv_python), [str(venv_python), __file__] + sys.argv[1:])
+            except Exception:
+                pass
+    
+    # Try uv with --system flag to install to user site (PEP 668-safe)
     uv_path = shutil.which("uv")
     if uv_path:
         try:
             result = subprocess.run(
-                [uv_path, "pip", "install", "--quiet", "scikit-learn>=1.5.0", "numpy>=1.26.0"],
+                [uv_path, "pip", "install", "--quiet", "--user", "scikit-learn>=1.5.0", "numpy>=1.26.0"],
                 capture_output=True, text=True, timeout=120
             )
             if result.returncode == 0:
                 if verbose:
-                    print("  [DEPS] Installed via uv")
+                    print("  [DEPS] Installed via uv --user")
                 return True
             if verbose:
                 print(f"  [DEPS] uv failed: {result.stderr[:200]}")
@@ -108,7 +137,7 @@ def _ensure_deps(verbose: bool = False):
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"  [WARN] Failed to auto-install dependencies: {result.stderr[:200]}")
-            print(f"  [WARN] Please run: pip install {' '.join(missing)}")
+            print(f"  [WARN] Please run: pip install --user {' '.join(missing)}")
             return False
         if verbose:
             print(f"  [DEPS] Installed: {', '.join(missing)}")
