@@ -7,7 +7,7 @@ Overview of all skills available through ai-skillweave, organized by source and 
 | Source | Count | Provenance |
 |---|---|---|
 | ECC | 272 | Local clone of `affaan-m/everything-claude-code` (`~/.claude-everything-claude-code/skills/`) — plus 92 commands + 67 agents in `commands/` and `agents/` (Claude-only) |
-| K-Dense Inc. | 107 | Tagged `skill-author: K-Dense Inc.` in frontmatter, present in `~/.claude/skills/` (via `~/.hermes/skills/openclaw-imports/`, which has 108 K-Dense-tagged skills in its 917-skill corpus) — despite the empty local `~/.claude-scientific-skills/` clone |
+| K-Dense Inc. | 107 | Tagged `skill-author: K-Dense Inc.` in frontmatter, present in `~/.claude/skills/` (imported via `~/.hermes/skills/openclaw-imports/`, which has 108 K-Dense-tagged skills in its 917-skill corpus). The local `~/.claude-scientific-skills/` clone is empty because the upstream `scientific-skills/` directory has no content in the snapshot we track. |
 | ClawBio | 89 | Local clone of `ClawBio/ClawBio` (`~/.claude-clawbio-skills/skills/`) |
 | Anthropic official | 17 | Local clone in `.curated/` (`~/.claude-curated-skills/anthropic-official/skills/`) |
 | OpenAI Codex curated | 38 (unique names that flow into Claude) | Local clone in `.curated/` + `.system/` (`~/.claude-curated-skills/openai-codex/skills/`); 44 SKILL.md total but 6 are name-collision dedupes |
@@ -153,9 +153,11 @@ Specialized AI agents for focused review, build, and planning tasks. From [affaa
 
 ## Source 4: K-Dense Scientific — 107 skills (verified by frontmatter)
 
-The local `~/.claude-scientific-skills/` clone is empty (`scientific-skills/` directory is empty, no `.git` directory — the upstream repo at the time of audit also had no skill content), **but 107 K-Dense-authored skills ARE present in `~/.claude/skills/`** — they have `skill-author: K-Dense Inc.` in their SKILL.md frontmatter and were imported via `~/.hermes/skills/openclaw-imports/` (which contains 108 K-Dense-tagged skills in its 917-skill corpus). They live at the immediate-subdir level in `~/.claude/skills/`, not in a `scientific-skills/` subdirectory.
+**107 K-Dense-authored skills are present in `~/.claude/skills/`**, identified by the `skill-author: K-Dense Inc.` tag in each skill's SKILL.md frontmatter. They were imported via `~/.hermes/skills/openclaw-imports/` (the Hermes staging corpus, which has 108 K-Dense-tagged skills in its 917-skill total). They live at the immediate-subdir level in `~/.claude/skills/`, not in a `scientific-skills/` subdirectory.
 
-This section lists all 107 K-Dense-authored skills verified by frontmatter. The categorization below is topical (not filesystem-derived, since the skills live at the top level of `~/.claude/skills/`).
+The local `~/.claude-scientific-skills/` clone (which the install script would normally populate by cloning `K-Dense-AI/scientific-agent-skills`) is currently empty because the upstream `scientific-skills/` directory has no skill content in the snapshot we track. When K-Dense republishes skill definitions, running `./safe-install.sh --with-science` will refresh the clone. The existing 107 skills are unaffected — they continue to flow to all 5 harnesses via the `claude_extras` supplemental scan in `update-ecc.sh`.
+
+The list below groups all 107 K-Dense skills by topic. Categories are topical, not filesystem-derived (since the skills live at the top level of `~/.claude/skills/`, not in any subdirectory).
 
 ### Bioinformatics & Genomics
 - `scanpy`, `scvi-tools`, `cellxgene-census`, `pysam`, `biopython`, `bioservices`, `pyopenms`, `deeptools`, `pathml`, `gtars`, `matchms`, `etetoolkit`, `arboreto`, `geniml`, `gget`, `anndata`, `polars-bio`, `histolab`, `pyhealth`, `pydicom`, `neuropixels-analysis`, `omero-integration`, `pydeseq2`

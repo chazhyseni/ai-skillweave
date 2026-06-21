@@ -19,7 +19,7 @@ Numbers are machine-specific (each user gets slightly different totals based on 
 | Source | Skills | Notes |
 |--------|--------|-------|
 | [Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code) | 272 SKILL.md dirs (+ 92 slash-commands and 67 sub-agents at the top-level `commands/` and `agents/` subdirs of ECC, Claude-only) | Community-maintained — testing, architecture, security, cloud, language patterns |
-| [K-Dense scientific](https://github.com/K-Dense-AI/scientific-agent-skills) | 0 SKILL.md dirs in the local `~/.claude-scientific-skills/` clone (empty `scientific-skills/`, no `.git`) | The repo was cloned at some point and 107 K-Dense-authored skills (tagged `skill-author: K-Dense Inc.`) **are present in `~/.claude/skills/`** — imported via `~/.hermes/skills/openclaw-imports/` (which has 108 K-Dense-tagged skills in its 917-skill corpus). The local `~/.claude-scientific-skills/` clone is now empty; the upstream repo at the time of audit also had no skill content. **The actual K-Dense footprint in the Claude pool is 107 skills, just from a different snapshot than the empty local clone suggests.** |
+| [K-Dense scientific](https://github.com/K-Dense-AI/scientific-agent-skills) | **107 skills present** (in `~/.claude/skills/`, tagged `skill-author: K-Dense Inc.`) | Bioinformatics, cheminformatics, drug discovery, clinical research, proteomics, medical science. The local `~/.claude-scientific-skills/` clone currently has no content (the upstream snapshot is empty), but 107 K-Dense-authored skills already live in `~/.claude/skills/` — they were imported via `~/.hermes/skills/openclaw-imports/` (which has 108 K-Dense-tagged skills in its 917-skill corpus). When K-Dense republishes skill content, running `./safe-install.sh --with-science` will refresh the clone. |
 | [ClawBio bioinformatics](https://github.com/ClawBio/ClawBio) | 89 SKILL.md dirs | Bioinformatics-native pipeline skills with executable Python scripts (398 `.py` files, 357 markdown files) |
 | [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) | 547 SKILL.md dirs upstream (529 in local clone) | 63 bioinformatics categories. Cloned directly into `~/.claude/skills/` at depth-3 layout (`<category>/<skill>/SKILL.md`) |
 | [SkillGraph bioinformatics](https://github.com/variomeanalytics/bioinformatics-agent-skills) | MCP-served | Via MCP server with knowledge graph |
@@ -36,11 +36,11 @@ All sources are credited in the Skill Sources table above.
 
 ## Scientific Agent Skills — K-Dense
 
-> **Scientific skills from [K-Dense-AI/scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills)** — covering bioinformatics, cheminformatics, drug discovery, clinical research, proteomics, medical imaging, ML/AI, materials science, physics, and 100+ scientific databases.
+> **107 K-Dense-authored skills are present in `~/.claude/skills/`** (verified by `skill-author: K-Dense Inc.` frontmatter tag), covering bioinformatics, cheminformatics, drug discovery, clinical research, proteomics, medical imaging, ML/AI, materials science, physics, and 100+ scientific databases.
 
-The repo is cloned and the framework is in place, but the upstream `scientific-skills/` directory is **currently empty in the snapshot we track**. When K-Dense publishes skill definitions, they will appear in this section and in `~/.claude/skills/` automatically.
+The 107 K-Dense skills were imported into `~/.claude/skills/` via `~/.hermes/skills/openclaw-imports/` (the Hermes staging corpus, which has 108 K-Dense-tagged skills). The local `~/.claude-scientific-skills/` clone is currently empty because the upstream `K-Dense-AI/scientific-agent-skills` repo snapshot we track has no skill content in its `scientific-skills/` directory. When K-Dense republishes skill definitions, running `./safe-install.sh --with-science` will refresh the clone. The existing 107 skills are unaffected — they live in `~/.claude/skills/` and flow to all 5 harnesses via the `claude_extras` supplemental scan in `update-ecc.sh`.
 
-To install (no-op today; activates when K-Dense publishes skills):
+To install (no-op for the upstream clone; the 107 skills are already present from the Hermes corpus):
 
 ```bash
 ./safe-install.sh --with-science                    # ECC + K-Dense scientific skills
@@ -424,7 +424,7 @@ Skills are structured Markdown prompts (SKILL.md files) that tell AI agents *how
 | Source | Skills | Notes |
 |--------|--------|-------|
 | ECC core | 272 SKILL.md dirs (+ 92 commands + 67 agents, Claude-only) | From `affaan-m/everything-claude-code` |
-| K-Dense scientific | 107 skills (in `~/.claude/skills/` via Hermes openclaw-imports) | From `K-Dense-AI/scientific-agent-skills` — the local `~/.claude-scientific-skills/` clone is empty (`scientific-skills/` is empty, no `.git`), but K-Dense-authored skills are present, imported via `~/.hermes/skills/openclaw-imports/` |
+| K-Dense scientific | 107 skills (in `~/.claude/skills/`) | From `K-Dense-AI/scientific-agent-skills` (imported via `~/.hermes/skills/openclaw-imports/`; the local `~/.claude-scientific-skills/` clone is currently empty because the upstream `scientific-skills/` directory has no content) |
 | ClawBio bioinformatics | 89 SKILL.md dirs | From `ClawBio/ClawBio` — pipeline skills with Python scripts |
 | [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) | 547 SKILL.md dirs upstream (529 in local clone) | From `GPTomics/bioSkills` — bioinformatics categories in `~/.claude/skills/` at depth-3 |
 | SkillGraph bioinformatics | dynamic | From `variomeanalytics/bioinformatics-agent-skills` via MCP server (not on-disk) |
@@ -577,11 +577,11 @@ Only **2 of 4 memory types** produce generalizable skills: `heuristic` and `anti
 > **Note on defaults:** bare `./safe-install.sh` installs ECC + K-Dense + ClawBio + bioSkills (all four are on by default). Use `--without-science`, `--without-bio`, or `--without-bioskills` to skip a source.
 
 ```bash
-./safe-install.sh                                    # ECC + K-Dense + ClawBio (default — all three)
+./safe-install.sh                                    # ECC + K-Dense (107) + ClawBio + bioSkills (all four are on by default)
 ./safe-install.sh --without-science --without-bio    # ECC only (fastest)
-./safe-install.sh --with-science                     # ECC + K-Dense scientific skills (currently 0 — upstream snapshot is empty)
-./safe-install.sh --with-bio                         # ECC + ClawBio bioinformatics (89 skills)
-./safe-install.sh --with-curated                     # Also include OpenAI Codex curated skills (currently 0 — upstream snapshot is empty)
+./safe-install.sh --with-science                     # Also clone the K-Dense-AI repo (no-op today: upstream snapshot has no skill content; the 107 K-Dense skills already come from the Hermes corpus)
+./safe-install.sh --with-bio                         # Also include ClawBio bioinformatics (89 skills with Python scripts)
+./safe-install.sh --with-curated                     # Also include OpenAI Codex curated skills (44 in upstream, 38 unique flow into Claude)
 ```
 
 ### Keeping Skills Up to Date
@@ -921,7 +921,7 @@ The MCP server (`beads-mcp`) makes beads available in any harness that loads MCP
 
 - `docs/TROUBLESHOOTING.md` — Common problems and solutions
 - `~/.claude-everything-claude-code/` — Full ECC skills repository
-- `~/.claude-scientific-skills/` — K-Dense scientific agent skills repository
+- `~/.claude-scientific-skills/` — K-Dense scientific agent skills repository (currently empty — the upstream snapshot has no skill content; the 107 K-Dense-authored skills are in `~/.claude/skills/` from the Hermes corpus instead)
 - `~/.claude-clawbio-skills/` — ClawBio bioinformatics pipeline skills repository
 - [ClawBio/ClawBio](https://github.com/ClawBio/ClawBio) — Bioinformatics-native pipeline skills with executable Python scripts
 - [variomeanalytics/bioinformatics-agent-skills](https://github.com/variomeanalytics/bioinformatics-agent-skills) — Bioinformatics pipeline skills + knowledge graph (MCP)
