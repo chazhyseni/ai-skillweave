@@ -150,7 +150,7 @@ ollama launch copilot     # Copilot CLI + MCP servers
 ai-skillweave/
 ├── install.sh                    ← Master installer (run this)
 ├── safe-install.sh               ← ECC skills installer
-├── extract-conversation-skills.py ← 4-stage learning pipeline (Ingestion→Learning→Consolidation→Output)
+├── extract-conversation-skills.py ← 4-stage learning pipeline + batched LLM distillation (Ingestion→Learning→Consolidation→Output; 30-50× faster than naive via 20-group batches + 16 workers + HTTP connection pooling)
 ├── sync-learned-skills.sh        ← Sync learned skills + run pipeline (--stats, --prune, --sync-only)
 │
 ├── hooks/                        ← Claude Code hooks (auto-installed by install.sh)
@@ -175,7 +175,7 @@ ai-skillweave/
 │   ├── setup-hooks.sh            ← Install PreToolUse hook (codesight-redirect)
 │   ├── setup-learning-hook.sh    ← Install UserPromptSubmit hook (BMO learning capture)
 │   ├── setup-beads.sh            ← Install beads CLI + beads-mcp + bd init (auto-installs Homebrew if needed)
-│   ├── install-bioskills.sh      ← Clone GPTomics/bioSkills → ~/.claude/skills/ (438 on-demand bioinformatics skills)
+│   ├── install-bioskills.sh      ← Clone GPTomics/bioSkills → ~/.claude/skills/ (550 on-demand bioinformatics skills, 63 categories)
 │   ├── consolidate-learning.py   ← Consolidate captured events into SKILL.md files
 │   ├── setup-claude-desktop.sh   ← Standalone: MCP + skills for Claude Desktop GUI
 │   ├── build-desktop-skills.sh   ← Package .skill files for Desktop upload
@@ -185,13 +185,15 @@ ai-skillweave/
 │   ├── setup-copilot.sh          ← Apply Copilot CLI MCP config
 │   ├── setup-copilot-skills.sh   ← Bridge Copilot CLI to the cross-harness skill pool (symlink + COPILOT_SKILLS_DIRS)
 │   ├── setup-ollama-config.sh    ← Apply Ollama integration→model mapping
-│   ├── update-ecc.sh             ← Pull latest ECC + rebuild cache + learn-sync + re-sync harnesses
+│   ├── update-ecc.sh             ← Pull latest ECC + rebuild cache + re-sync harnesses (handles Codex 64-char names + broken symlinks)
 │   ├── disable-zscaler.sh        ← Disable Zscaler proxy
 │   └── verify.sh                 ← Health check all components (beads, lean-skills, all harnesses)
 │
 ├── docs/
-│   ├── AUDIT.md                  ← MCP/subagent audit (what was fixed + why)
-│   └── TROUBLESHOOTING.md        ← Common issues and fixes
+│   ├── SKILLS-CATALOG.md         ← Per-source skill listing + category breakdown + learning pipeline
+│   ├── TROUBLESHOOTING.md        ← Common issues and fixes (Copilot bridge, context overflow, MCP failures)
+│   ├── x-thread.md               ← X/Twitter thread (5 posts) for project announcements
+│   └── linkedin-post.md          ← LinkedIn announcement post
 │
 └── shared-learning/
     └── learning.md               ← Cross-harness learned patterns log
@@ -478,7 +480,7 @@ python3 scripts/consolidate-learning.py
 
 ### 2. Batch Pipeline (secondary — runs on install/update)
 
-For bulk distillation from conversation history. A 4-stage ALMA-inspired pipeline in `extract-conversation-skills.py`:
+For bulk distillation from conversation history. A 4-stage ALMA-inspired pipeline in `extract-conversation-skills.py` (see *Performance methodology* below for the 30-50× speedup that comes from batched LLM distillation + 16 workers + HTTP connection pooling):
 
 | Stage | What it does |
 |-------|-------------|
