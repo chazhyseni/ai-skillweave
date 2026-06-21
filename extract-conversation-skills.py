@@ -42,7 +42,6 @@ import json
 import hashlib
 import math
 import shutil
-import requests
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -1350,7 +1349,8 @@ Rules:
         results = []
         lock = __import__('threading').Lock()
         
-        # HTTP session for connection pooling
+        # HTTP session for connection pooling (import requests lazily)
+        import requests
         session = requests.Session()
         
         def _process_batch(batch: List[PatternGroup], batch_idx: int) -> List[PatternGroup]:
