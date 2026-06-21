@@ -41,6 +41,7 @@ import re
 import json
 import hashlib
 import math
+import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -58,12 +59,34 @@ def _ensure_deps(verbose: bool = False):
     """Ensure scikit-learn and numpy are available.
 
     sentence-transformers is intentionally NOT checked here — importing it
-    can crash the Python process on systems with abseil-cpp/pyarrow version
+    can crash the Python process on abseil-cpp/pyarrow version
     conflicts (SIGABRT, not catchable via except Exception). It is imported
     lazily inside _cluster_by_similarity with a try/except that falls back
     to Jaccard clustering if unavailable.
 
-"""
+    Uses uv when available (avoids PEP 668 externally-managed-environment errors).
+    """
+    import subprocess, sys
+    
+    # Prefer uv (handles PEP 668 automatically)
+    uv_path = shutil.which("uv")
+    if uv_path:
+        try:
+            result = subprocess.run(
+                [uv_path, "pip", "install", "--quiet", "scikit-learn>=1.5.0", "numpy>=1.26.0"],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode == 0:
+                if verbose:
+                    print("  [DEPS] Installed via uv")
+                return True
+            if verbose:
+                print(f"  [DEPS] uv failed: {result.stderr[:200]}")
+        except (subprocess.TimeoutExpired, Exception) as e:
+            if verbose:
+                print(f"  [DEPS] uv failed: {str(e)[:100]}")
+        # Fall through to pip-based install
+    
     required = {
         "scikit-learn": "scikit-learn>=1.5.0",
         "numpy": "numpy>=1.26.0",
@@ -78,7 +101,6 @@ def _ensure_deps(verbose: bool = False):
     if missing:
         if verbose:
             print(f"  [DEPS] Installing: {', '.join(missing)}...")
-        import subprocess, sys
         in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
         cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + missing
         if not in_venv:
