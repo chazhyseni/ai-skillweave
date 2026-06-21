@@ -406,6 +406,32 @@ all_skills.update(clawbio_skills)         # medium priority
 all_skills.update(science_skills)         # medium-high priority
 all_skills.update(ecc_skills)             # highest priority (ECC wins)
 
+# Supplemental: pick up skills that live in ~/.claude/skills/ but aren't
+# in any of the source repos. The most common case is K-Dense-authored
+# skills that were imported into ~/.claude/skills/ via the Hermes
+# openclaw-imports corpus at some earlier point. The ~/.claude-scientific-skills/
+# clone is currently empty, so without this step those skills would never
+# reach Codex or Pi (which only see skills that flow through all_skills).
+# We add them at LOWER priority than all source repos so source skills
+# always win on name collision.
+claude_extras = {}
+claude_skills_dir = os.path.join(home, ".claude", "skills")
+if os.path.isdir(claude_skills_dir):
+    for skill_md_path in glob.glob(os.path.join(claude_skills_dir, "*", "SKILL.md")):
+        # Skip the depth-2 (bioSkills) and depth-3 (archive) entries
+        rel = os.path.relpath(skill_md_path, claude_skills_dir)
+        if rel.count(os.sep) != 1:
+            continue
+        skill_name = os.path.basename(os.path.dirname(skill_md_path))
+        # Skip dotfile-prefixed and learned skills
+        if skill_name.startswith(".") or skill_name == "learned":
+            continue
+        # Only add if NOT already covered by a source repo (avoid duplicates)
+        if skill_name in all_skills:
+            continue
+        claude_extras[skill_name] = os.path.dirname(skill_md_path)
+all_skills.update(claude_extras)            # supplemental (lowest priority)
+
 stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}}
 
 def sync_to_harness_real(skill_name, skill_dir, dest_dir):
@@ -514,16 +540,34 @@ if os.path.isdir(os.path.join(home, ".openclaw", "workspace")):
     stats["openclaw"]["total"] = len([d for d in os.listdir(openclaw_ws) if os.path.isdir(os.path.join(openclaw_ws, d))])
 
 # --- Pi: symlinks for all skill sources ---
+# Use os.path.lexists (NOT os.path.exists) so we detect broken symlinks
+# and replace them. A broken symlink returns False for exists() (it follows
+# the link) but True for lexists() (it sees the symlink inode). Without
+# this, a prior install's symlink whose target moved/replaced would cause
+# os.symlink() below to raise FileExistsError.
 if os.path.isdir(os.path.join(home, ".pi", "agent")):
     os.makedirs(pi_skills, exist_ok=True)
     for skill_name, skill_dir in all_skills.items():
         target = os.path.join(pi_skills, skill_name)
-        if not os.path.exists(target):
+        if os.path.lexists(target):
+            # Entry exists. Check if it's a valid symlink to the same target
+            # — if so, no work needed.
             try:
-                os.symlink(skill_dir, target)
-                stats["pi"]["added"] += 1
-            except (OSError, FileExistsError):
-                pass  # Skip if symlink fails (e.g., target already exists)
+                if os.path.islink(target) and os.path.realpath(target) == os.path.realpath(skill_dir):
+                    continue
+            except OSError:
+                pass
+            # Otherwise this is a stale entry (broken symlink, real dir from
+            # a different source, etc.). Remove and let the sync continue.
+            try:
+                os.remove(target)
+            except OSError:
+                continue  # can't remove; skip this skill
+        try:
+            os.symlink(skill_dir, target)
+            stats["pi"]["added"] += 1
+        except (OSError, FileExistsError):
+            pass  # Skip if symlink fails for any other reason
     stats["pi"]["total"] = len(os.listdir(pi_skills))
 
 # --- Codex: symlinks where clean, sanitized copies where needed ---
