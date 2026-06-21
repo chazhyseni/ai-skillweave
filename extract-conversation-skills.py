@@ -57,7 +57,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # =============================================================================
 
 def _ensure_deps(verbose: bool = False):
-    """Ensure scikit-learn and numpy are available.
+    """Ensure scikit-learn, numpy, and requests are available.
 
     sentence-transformers is intentionally NOT checked here — importing it
     can crash the Python process on abseil-cpp/pyarrow version
@@ -76,8 +76,9 @@ def _ensure_deps(verbose: bool = False):
     try:
         import sklearn
         import numpy
+        import requests
         if verbose:
-            print(f"  [DEPS] Already available: scikit-learn={sklearn.__version__}, numpy={numpy.__version__}")
+            print(f"  [DEPS] Already available: scikit-learn={sklearn.__version__}, numpy={numpy.__version__}, requests={requests.__version__}")
         return True
     except ImportError:
         pass
@@ -89,7 +90,7 @@ def _ensure_deps(verbose: bool = False):
         if venv_python.exists():
             try:
                 result = subprocess.run(
-                    [str(venv_python), "-c", "import sklearn, numpy; print('OK')"],
+                    [str(venv_python), "-c", "import sklearn, numpy, requests; print('OK')"],
                     capture_output=True, text=True, timeout=10
                 )
                 if result.returncode == 0:
@@ -118,11 +119,11 @@ def _ensure_deps(verbose: bool = False):
                 print(f"  [DEPS] venv creation warning: {result.stderr[:100]}")
     
     if learn_venv_python.exists():
-        # Install deps into the venv
+        # Install deps into the venv (including requests for batch HTTP)
         uv_path = shutil.which("uv")
         if uv_path:
             result = subprocess.run(
-                [uv_path, "pip", "install", "--quiet", "scikit-learn>=1.5.0", "numpy>=1.26.0"],
+                [uv_path, "pip", "install", "--quiet", "scikit-learn>=1.5.0", "numpy>=1.26.0", "requests>=2.28.0"],
                 capture_output=True, text=True, timeout=120,
                 env={**os.environ, "VIRTUAL_ENV": str(learn_venv)}
             )
@@ -138,6 +139,7 @@ def _ensure_deps(verbose: bool = False):
     required = {
         "scikit-learn": "scikit-learn>=1.5.0",
         "numpy": "numpy>=1.26.0",
+        "requests": "requests>=2.28.0",
     }
     missing = []
     for module, pkg in required.items():
