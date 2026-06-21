@@ -64,8 +64,10 @@ def _ensure_deps(verbose: bool = False):
     lazily inside _cluster_by_similarity with a try/except that falls back
     to Jaccard clustering if unavailable.
 
-    Uses uv when available (avoids PEP 668 externally-managed-environment errors).
-    Prefers repo's .venv if it exists.
+    Strategy:
+    1. Check if already installed (skip if available)
+    2. Prefer repo's .venv if it exists (re-exec with venv python)
+    3. Create/use ~/.claude/.venv for learning pipeline deps (isolated, PEP 668-safe)
     """
     import subprocess, sys
     
@@ -97,25 +99,41 @@ def _ensure_deps(verbose: bool = False):
             except Exception:
                 pass
     
-    # Try uv with --system flag to install to user site (PEP 668-safe)
-    uv_path = shutil.which("uv")
-    if uv_path:
-        try:
+    # Create/use ~/.claude/.venv for learning pipeline (isolated from system Python)
+    home = Path.home()
+    learn_venv = home / ".claude" / ".venv"
+    learn_venv_python = learn_venv / "bin" / "python"
+    
+    if not learn_venv_python.exists():
+        if verbose:
+            print(f"  [DEPS] Creating learning venv: {learn_venv}")
+        uv_path = shutil.which("uv")
+        if uv_path:
             result = subprocess.run(
-                [uv_path, "pip", "install", "--quiet", "--user", "scikit-learn>=1.5.0", "numpy>=1.26.0"],
-                capture_output=True, text=True, timeout=120
+                [uv_path, "venv", str(learn_venv)],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode != 0 and verbose:
+                print(f"  [DEPS] venv creation warning: {result.stderr[:100]}")
+    
+    if learn_venv_python.exists():
+        # Install deps into the venv
+        uv_path = shutil.which("uv")
+        if uv_path:
+            result = subprocess.run(
+                [uv_path, "pip", "install", "--quiet", "scikit-learn>=1.5.0", "numpy>=1.26.0"],
+                capture_output=True, text=True, timeout=120,
+                env={**os.environ, "VIRTUAL_ENV": str(learn_venv)}
             )
             if result.returncode == 0:
                 if verbose:
-                    print("  [DEPS] Installed via uv --user")
-                return True
-            if verbose:
-                print(f"  [DEPS] uv failed: {result.stderr[:200]}")
-        except (subprocess.TimeoutExpired, Exception) as e:
-            if verbose:
-                print(f"  [DEPS] uv failed: {str(e)[:100]}")
-        # Fall through to pip-based install
+                    print(f"  [DEPS] Installed to {learn_venv} via uv")
+                # Re-run this script with the venv python
+                os.execv(str(learn_venv_python), [str(learn_venv_python), __file__] + sys.argv[1:])
+            elif verbose:
+                print(f"  [DEPS] uv install failed: {result.stderr[:200]}")
     
+    # Final fallback: try pip with --user (may fail on PEP 668 systems)
     required = {
         "scikit-learn": "scikit-learn>=1.5.0",
         "numpy": "numpy>=1.26.0",
@@ -129,7 +147,7 @@ def _ensure_deps(verbose: bool = False):
     
     if missing:
         if verbose:
-            print(f"  [DEPS] Installing: {', '.join(missing)}...")
+            print(f"  [DEPS] Installing via pip: {', '.join(missing)}...")
         in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
         cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + missing
         if not in_venv:
@@ -137,7 +155,7 @@ def _ensure_deps(verbose: bool = False):
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"  [WARN] Failed to auto-install dependencies: {result.stderr[:200]}")
-            print(f"  [WARN] Please run: pip install --user {' '.join(missing)}")
+            print(f"  [WARN] Please run: python3 -m pip install --user {' '.join(missing)}")
             return False
         if verbose:
             print(f"  [DEPS] Installed: {', '.join(missing)}")
