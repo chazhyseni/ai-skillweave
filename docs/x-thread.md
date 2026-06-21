@@ -3,7 +3,7 @@
 ## Post 1 (Main)
 Most AI agent setups are stateless by default. Without configuration, they don't retain your corrections, domain expertise, or custom conventions across sessions.
 
-ai-skillweave changes that: one install loads ~900 skills + MCP servers into Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Structured expertise, not guesswork.
+ai-skillweave changes that: one install loads **~1,700 skills** + MCP servers into Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Structured expertise, not guesswork.
 
 And it learns from your corrections automatically.
 
@@ -38,6 +38,8 @@ MCP servers extend what the agent can *do*:
 ## Post 4 (Auto-learning)
 The learning pipeline captures corrections via hooks and distills them into reusable skills with semantic clustering.
 
+The batch distillation is **30-50× faster than naive per-group LLM calls** — ~580 groups processed in 2-5 minutes via batched prompts + 16 parallel workers + HTTP connection pooling, instead of 4.8 hours sequentially.
+
 You correct once. Every harness remembers.
 
 The goal: one harness, any agent.
@@ -51,6 +53,6 @@ cd ai-skillweave
 ./install.sh
 ```
 
-One command. Five harnesses. ~900 skills. MCP servers included. Zero config drift.
+One command. Five harnesses. **~1,700 skills**. MCP servers included. Zero config drift.
 
 #AI #ML #DevTools #OpenSource
