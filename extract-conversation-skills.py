@@ -42,6 +42,7 @@ import json
 import hashlib
 import math
 import shutil
+import requests
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -202,10 +203,11 @@ MEMORY_TYPES = ["heuristic", "anti_pattern", "preference", "domain_knowledge"]
 GENERALIZABLE_TYPES = {"heuristic", "anti_pattern"}
 
 
-def _try_get_completion(prompt: str, timeout: int = 60, verbose: bool = False) -> Optional[str]:
+def _try_get_completion(prompt: str, timeout: int = 60, verbose: bool = False, session=None) -> Optional[str]:
     """Try to get completion from models in priority order. Returns first successful response.
     
     Tries standard Ollama HTTP API first (reliable, fast), then falls back to subprocess.
+    If session is provided (requests.Session), uses it for connection pooling.
     """
     import subprocess
     
@@ -222,32 +224,47 @@ def _try_get_completion(prompt: str, timeout: int = 60, verbose: bool = False) -
             if model_type == "ollama":
                 # --- PRIMARY: Standard Ollama HTTP API ---
                 try:
-                    import urllib.request
-                    import urllib.error
-                    req = urllib.request.Request(
-                        "http://localhost:11434/api/generate",
-                        data=json.dumps({
-                            "model": model_id,
-                            "prompt": prompt,
-                            "stream": False,
-                            "options": {"temperature": 0.3, "num_predict": 512}
-                        }).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(req, timeout=min(timeout, model_timeout)) as resp:
-                        data = json.loads(resp.read().decode("utf-8"))
+                    if session is not None:
+                        # Use requests with connection pooling (faster for batched calls)
+                        resp = session.post(
+                            "http://localhost:11434/api/generate",
+                            json={
+                                "model": model_id,
+                                "prompt": prompt,
+                                "stream": False,
+                                "options": {"temperature": 0.3, "num_predict": 1024}
+                            },
+                            timeout=min(timeout, model_timeout)
+                        )
+                        resp.raise_for_status()
+                        data = resp.json()
                         response_text = data.get("response", "").strip()
-                        if response_text:
-                            if verbose:
-                                print(f"  [LLM-OK] {model_name} (HTTP API) returned {len(response_text)} chars")
-                            return response_text
-                except (urllib.error.URLError, urllib.error.HTTPError, ConnectionRefusedError) as e:
-                    if verbose:
-                        print(f"  [LLM-FALLBACK] HTTP API unavailable ({type(e).__name__}), trying subprocess...")
+                    else:
+                        # Fallback to urllib (no session)
+                        import urllib.request
+                        import urllib.error
+                        req = urllib.request.Request(
+                            "http://localhost:11434/api/generate",
+                            data=json.dumps({
+                                "model": model_id,
+                                "prompt": prompt,
+                                "stream": False,
+                                "options": {"temperature": 0.3, "num_predict": 1024}
+                            }).encode("utf-8"),
+                            headers={"Content-Type": "application/json"},
+                            method="POST"
+                        )
+                        with urllib.request.urlopen(req, timeout=min(timeout, model_timeout)) as resp:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            response_text = data.get("response", "").strip()
+                    
+                    if response_text:
+                        if verbose:
+                            print(f"  [LLM-OK] {model_name} returned {len(response_text)} chars")
+                        return response_text
                 except Exception as e:
                     if verbose:
-                        print(f"  [LLM-FALLBACK] HTTP API error ({type(e).__name__}), trying subprocess...")
+                        print(f"  [LLM-FALLBACK] HTTP API unavailable ({type(e).__name__}), trying subprocess...")
                 
                 # --- FALLBACK: Subprocess via ollama run ---
                 result = subprocess.run(
@@ -1316,6 +1333,160 @@ Rules:
         except Exception:
             pass
         return None
+    
+    def _llm_distill_batch(self, groups: List[PatternGroup], batch_size: int = 20) -> List[PatternGroup]:
+        """Distill multiple groups in a single LLM call.
+        
+        Sends batch_size groups in one prompt, gets JSON array back.
+        20-30x speedup vs individual calls.
+        """
+        if not groups:
+            return []
+        
+        # Split into batches
+        batches = [groups[i:i+batch_size] for i in range(0, len(groups), batch_size)]
+        results = []
+        lock = __import__('threading').Lock()
+        
+        # HTTP session for connection pooling
+        session = requests.Session()
+        
+        def _process_batch(batch: List[PatternGroup], batch_idx: int) -> List[PatternGroup]:
+            """Process one batch of groups."""
+            # Build prompt with all groups in batch
+            samples_text = []
+            for idx, g in enumerate(batch):
+                sample_corrections = sorted(g.corrections, key=lambda c: len(c.raw_text), reverse=True)[:2]
+                corrections_str = "\n".join(f"  - {c.raw_text}" for c in sample_corrections)
+                samples_text.append(f"""Group {idx + 1}:
+  Memory type: {g.memory_type}
+  Occurrences: {g.frequency}
+  Harnesses: {', '.join(set(c.harness for c in sample_corrections))}
+  Corrections:
+{corrections_str}""")
+            
+            # Build the groups section outside f-string (avoid backslash in f-string)
+            groups_section = "\n\n".join(samples_text)
+            
+            prompt = f"""You are distilling {len(batch)} repeated user corrections into concise, generalizable skills.
+
+For EACH group below, extract:
+- SHORT_NAME: 3-5 word imperative slug (e.g., "verify-output-completeness")
+- CONDITION: When this arises (general, not tool-specific, 1 sentence)
+- STRATEGY: What to do (complete sentence, semicolons for steps)
+- ANTI-PATTERN: What not to do (1 sentence, or "NONE" for non-anti-pattern types)
+
+Groups to distill:
+
+{groups_section}
+
+Respond with a JSON array of exactly {len(batch)} objects, each with keys:
+"short_name", "condition", "strategy", "anti_pattern"
+
+Rules:
+- SHORT_NAME: imperative verb phrase, 3-5 words, kebab-case (e.g., "verify-before-commit")
+- CONDITION: generalizable, strip domain specifics (file paths, tool names, URLs)
+- STRATEGY: actionable steps, complete sentences
+- ANTI-PATTERN: "NONE" if not an anti-pattern type
+- All fields must be complete sentences ending with periods
+- No markdown, just valid JSON"""
+
+            try:
+                output = _try_get_completion(prompt, timeout=180, verbose=self.verbose, session=session)
+                if not output:
+                    if self.verbose:
+                        print(f"  [BATCH-{batch_idx}] Failed to get completion")
+                    # Fall back to individual processing for this batch
+                    return [self._llm_distill_single(g) for g in batch]
+                
+                # Parse JSON response
+                try:
+                    # Strip any markdown code blocks
+                    output = re.sub(r'```json\s*', '', output)
+                    output = re.sub(r'\s*```', '', output)
+                    results_list = json.loads(output)
+                except json.JSONDecodeError as e:
+                    if self.verbose:
+                        print(f"  [BATCH-{batch_idx}] JSON parse failed: {e}")
+                    # Fall back to individual processing
+                    return [self._llm_distill_single(g) for g in batch]
+                
+                # Map results back to groups
+                batch_results = []
+                for i, g in enumerate(batch):
+                    if i < len(results_list):
+                        r = results_list[i]
+                        condition = r.get("condition", "")
+                        strategy = r.get("strategy", "")
+                        anti_pattern = r.get("anti_pattern", "")
+                        short_name = r.get("short_name", "")
+                        
+                        # Validate
+                        if condition and strategy and self._validate_complete(condition, "condition") and self._validate_complete(strategy, "strategy"):
+                            if anti_pattern in ("", "NONE", "none"):
+                                anti_pattern = ""
+                            g.condition = condition
+                            g.strategy = strategy
+                            g.anti_pattern = anti_pattern
+                            g.short_name = short_name.lower().replace(" ", "-") if short_name else self._slugify_strategy(strategy)
+                            g.scope = self._determine_scope(g)
+                            batch_results.append(g)
+                        else:
+                            if self.verbose:
+                                print(f"  [BATCH-{batch_idx}] Group {i+1} validation failed, falling back to single")
+                            # Fall back to single distillation for this group
+                            result = self._llm_distill_single(g)
+                            if result:
+                                g.condition, g.strategy, g.anti_pattern, g.short_name = result
+                                g.scope = self._determine_scope(g)
+                                batch_results.append(g)
+                    else:
+                        # No result for this group, try single
+                        result = self._llm_distill_single(g)
+                        if result:
+                            g.condition, g.strategy, g.anti_pattern, g.short_name = result
+                            g.scope = self._determine_scope(g)
+                            batch_results.append(g)
+                
+                return batch_results
+                
+            except Exception as e:
+                if self.verbose:
+                    print(f"  [BATCH-{batch_idx}] Exception: {e}, falling back to individual")
+                # Fall back to individual processing
+                return [self._llm_distill_single(g) for g in batch]
+        
+        # Process batches in parallel
+        max_workers = min(16, (len(batches) + 1) // 2)  # More workers for batches
+        start_time = time.time()
+        
+        if self.verbose:
+            print(f"  Processing {len(batches)} batches (batch_size={batch_size}, workers={max_workers})...")
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_batch = {executor.submit(_process_batch, batch, idx): (batch, idx) for idx, batch in enumerate(batches)}
+            for future in as_completed(future_to_batch):
+                batch, batch_idx = future_to_batch[future]
+                try:
+                    batch_results = future.result()
+                    with lock:
+                        results.extend(batch_results)
+                        elapsed = time.time() - start_time
+                        completed = len([b for b in batches if any(g in results for g in b)])
+                        if self.verbose or completed % max_workers == 0:
+                            print(f"  [BATCH] {completed}/{len(groups)} groups done ({elapsed:.1f}s elapsed)")
+                except Exception as e:
+                    if self.verbose:
+                        print(f"  [BATCH-{batch_idx}] Failed: {e}")
+                    # Add unprocessed groups with empty abstraction (will be rejected downstream)
+                    with lock:
+                        for g in batch:
+                            g.condition = ""
+                            g.strategy = ""
+                        results.extend(batch)
+        
+        session.close()
+        return results
 
     def is_generalizable(self, group: PatternGroup) -> bool:
         for c in group.corrections:
@@ -1754,41 +1925,16 @@ class Pipeline:
         if self.verbose:
             print(f"  After dedup: {len(deduped)} groups")
 
-        # Abstract every group via LLM distillation (no keyword templates)
+        # Abstract every group via LLM distillation (batched + parallel)
         if deduped:
-            max_workers = 8
-            print(f"\n  Abstracting {len(deduped)} groups via LLM distillation (parallel, max {max_workers} workers)...")
-            start_time = time.time()
-            completed = 0
-            lock = __import__('threading').Lock()
-
-            def _abstract_one(group: PatternGroup) -> PatternGroup:
-                return self.consolidation.abstract_group(group)
-
-            # Parallelize LLM calls — urllib HTTP requests are thread-safe
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_group = {executor.submit(_abstract_one, g): g for g in deduped}
-                for future in as_completed(future_to_group):
-                    group = future.result()
-                    with lock:
-                        completed += 1
-                        elapsed = time.time() - start_time
-                        avg = elapsed / completed if completed else 0
-                        remaining = (len(deduped) - completed) * avg / max_workers
-                        eta_m = int(remaining // 60)
-                        eta_s = int(remaining % 60)
-                        status = f"[{completed}/{len(deduped)}] {avg:.1f}s avg"
-                        if group.condition:
-                            status += f" | {group.condition[:40]}..."
-                        if completed % 5 == 0 or completed == len(deduped):
-                            print(f"  {status} (ETA: {eta_m}m {eta_s}s)")
-                        elif self.verbose:
-                            print(f"  {status}")
-                    # Replace the original group in the list with the abstracted one
-                    for i, g in enumerate(deduped):
-                        if g.id == group.id:
-                            deduped[i] = group
-                            break
+            # Use batching: 20 groups per batch, 16 parallel workers
+            # 580 groups → 29 batches → ~2 minutes vs 4.8 hours
+            batch_size = 20
+            max_workers = 16
+            print(f"\n  Abstracting {len(deduped)} groups via LLM distillation (batched: {batch_size}/batch, {max_workers} workers)...")
+            abstracted = self.consolidation._llm_distill_batch(deduped, batch_size=batch_size)
+            # Replace deduped list with abstracted results
+            deduped = abstracted
 
         skills_to_write = []
         rejected = 0
