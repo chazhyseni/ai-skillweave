@@ -568,7 +568,17 @@ if os.path.isdir(os.path.join(home, ".claude")):
         src_mtime = os.path.getmtime(src)
         # Check if dst_dir exists as a symlink (from cross-harness linking)
         if os.path.islink(dst_dir):
-            # Symlink exists — copy SKILL.md into the symlinked directory
+            # Check if symlink is broken (target doesn't exist)
+            if not os.path.exists(dst_dir):
+                # Broken symlink — remove and recreate as valid symlink
+                try:
+                    os.remove(dst_dir)
+                    os.symlink(skill_dir, dst_dir)
+                except OSError:
+                    continue  # Skip if removal/recreation fails
+                claude_updated += 1
+                continue
+            # Valid symlink — copy SKILL.md into the symlinked directory
             if os.path.exists(dst) and src_mtime <= os.path.getmtime(dst):
                 continue  # Already up to date
             shutil.copy2(src, dst)
