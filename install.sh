@@ -320,14 +320,44 @@ fi
 # =============================================================================
 if command -v npm >/dev/null 2>&1; then
     log "Pre-installing MCP server packages globally (prevents first-launch timeouts)..."
-    # Install silently in background; failures are non-fatal (npx will fallback)
-    npm install -g @modelcontextprotocol/server-memory \
-        @modelcontextprotocol/server-sequential-thinking \
-        @upstash/context7-mcp@latest \
-        @playwright/mcp \
-        codesight \
-        token-optimizer-mcp 2>/dev/null || warn "Some MCP packages failed to pre-install (npx fallback will work but may be slower on first launch)"
-    success "MCP server packages pre-installed"
+    NPM_GLOBAL_ROOT="$(npm root -g 2>/dev/null)"
+    # name -> install spec (kept separate so version tags don't break verification)
+    MCP_NAMES=(
+        "@modelcontextprotocol/server-memory"
+        "@modelcontextprotocol/server-sequential-thinking"
+        "@upstash/context7-mcp"
+        "@playwright/mcp"
+        "codesight"
+        "token-optimizer-mcp"
+    )
+    MCP_SPECS=(
+        "@modelcontextprotocol/server-memory"
+        "@modelcontextprotocol/server-sequential-thinking"
+        "@upstash/context7-mcp@latest"
+        "@playwright/mcp"
+        "codesight"
+        "token-optimizer-mcp"
+    )
+    preinstall_failures=""
+    for i in "${!MCP_NAMES[@]}"; do
+        name="${MCP_NAMES[$i]}"
+        spec="${MCP_SPECS[$i]}"
+        # Verifies the FULL dependency tree resolves — a partial/interrupted install
+        # leaves nested deps missing, which `npm ls -g` reports as a non-zero exit.
+        if npm install -g "$spec" >/dev/null 2>&1 && npm ls -g "$name" >/dev/null 2>&1; then
+            continue
+        fi
+        # Corrupt or incomplete global install: remove it so `npx -y` downloads a
+        # clean copy on first launch instead of preferring the broken global one.
+        warn "$name did not install cleanly — removing broken global copy (npx will fetch a clean copy on first launch)"
+        [ -n "$NPM_GLOBAL_ROOT" ] && rm -rf "$NPM_GLOBAL_ROOT/$name" 2>/dev/null || true
+        preinstall_failures="$preinstall_failures $name"
+    done
+    if [ -n "$preinstall_failures" ]; then
+        warn "Pre-install incomplete for:$preinstall_failures (npx fallback active; first launch may be slower)"
+    else
+        success "MCP server packages pre-installed and verified"
+    fi
 else
     warn "npm not found — MCP servers will be installed on first launch (may timeout)"
 fi
