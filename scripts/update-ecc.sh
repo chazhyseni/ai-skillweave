@@ -375,6 +375,13 @@ bioskills_dir = os.path.join(home, ".claude", "skills")
 # symlinks skills/ and agents/ into ~/.claude/. The skills live at depth-2
 # (skill_name/SKILL.md) and are Agent Skills spec compliant.
 bipartite_dir = os.path.join(home, ".claude-bipartite", "skills")
+# Google DeepMind science-skills — 37 skills wrapping AlphaGenome, AlphaFold DB,
+# UniProt, Ensembl, gnomAD, GTEx, ClinVar, dbSNP, ChEMBL, PubChem, PDB, etc.
+deepmind_dir = os.path.join(home, ".claude-deepmind-skills", "skills")
+# SciAgent-Skills (jaechang-hits) — 197 skills for genomics, proteomics, structural
+# biology, drug discovery, systems biology, biostatistics, scientific writing.
+# Organized as categories/skill/SKILL.md (depth-2, like bioSkills).
+sciagent_dir = os.path.join(home, ".claude-sciagent-skills", "skills")
 
 # Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated + K-Dense
 def collect_skill_dirs(base_dir, max_depth=None):
@@ -429,11 +436,15 @@ science_skills = collect_skill_dirs(science_dir)
 clawbio_skills = collect_skill_dirs(clawbio_dir)
 bioskills = collect_bioskills(bioskills_dir)
 bipartite_skills = collect_skill_dirs(bipartite_dir)
+deepmind_skills = collect_skill_dirs(deepmind_dir)
+sciagent_skills = collect_skill_dirs(sciagent_dir)
 
 # Merge all sources (ECC has highest priority on name conflicts)
 all_skills = {}
 all_skills.update(codex_curated_skills)   # lowest priority
 all_skills.update(bioskills)              # bio skills (before clawbio/science/ecc)
+all_skills.update(sciagent_skills)       # SciAgent (same level as bioSkills)
+all_skills.update(deepmind_skills)        # DeepMind science skills
 all_skills.update(anthropic_skills)       # medium-low priority
 all_skills.update(clawbio_skills)         # medium priority
 all_skills.update(science_skills)         # medium-high priority
@@ -676,7 +687,7 @@ if os.path.isdir(os.path.join(home, ".claude")):
     print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
 total = len(all_skills)
-print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) + DeepMind({len(deepmind_skills)}) + SciAgent({len(sciagent_skills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")
