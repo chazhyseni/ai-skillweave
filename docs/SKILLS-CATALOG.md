@@ -2,7 +2,7 @@
 
 Overview of all skills available through ai-skillweave, organized by source and category.
 
-**Total: 2,652 unique skills** delivered to all 6 harnesses — `update-ecc.sh` merges every source repo into 2,652 unique skill directories. The pool is identical across harnesses; per-harness entry counts exceed 2,652 only when you include that harness's own native skills, the 599-entry learned cache, or category-bucket dirs (Claude only). Each source's **on-disk** size and its **net-new** (deduplicated) contribution to the 2,652:
+**Total: 2,652 unique skills** delivered to all 6 harnesses — `update-ecc.sh` merges every source repo into 2,652 unique skill directories. Every harness receives the same pool; only the on-disk delivery format differs. Each source's **on-disk** size and its **net-new** (deduplicated) contribution to the 2,652:
 
 | Source | On-disk | Net-new | Provenance |
 |---|---:|---:|---|
@@ -23,14 +23,16 @@ Overview of all skills available through ai-skillweave, organized by source and 
 | claude_extras | — | 105 | Imported into `~/.claude/skills/` with no live upstream repo; collected by the `claude_extras` supplemental scan in `update-ecc.sh` |
 | Personal learned | grows | — | `learned/events/`, distilled via `extract-conversation-skills.py`; 33 archived in `learned/.archive/` |
 
-**Per-harness entry counts** (top-level entries containing a direct SKILL.md, with symlinks followed — counts run higher than 2,652 only when a harness also carries its own native skills, the learned cache, or category-bucket dirs):
+**Per-harness delivery** — every harness receives the same 2,652 unique skills; the only thing that differs is the on-disk format:
 
-- **Claude: 2,711 entries** — 2,652 unique ai-skillweave skills + 59 category-bucket dirs (the `~/.claude/skills/<category>/` parents of bioSkills). Does NOT count the 599 learned-cache entries or nested example SKILL.md files.
-- **OpenClaw: 2,652** — real file copies of the 2,652-pool.
-- **Codex: 3,309 entries** — 2,652 ai-skillweave + 657 native Codex skills (shipped with the Codex harness, not touched by ai-skillweave).
-- **Pi: 3,309 entries** — 2,652 ai-skillweave + 657 native Pi skills (shipped with the Pi harness, not touched by ai-skillweave).
-- **Copilot: 2,652** — symlink to `~/.claude/skills/`, so it mirrors the ai-skillweave count.
-- **Hermes: 2,652** — real copies into `~/.hermes/skills/ai-skillweave/`; native toolsets and the 917-entry openclaw-imports staging set are untouched and not part of the ai-skillweave pool.
+- **Claude** — real-file copies in `~/.claude/skills/` (each skill a flat dir with `SKILL.md`).
+- **OpenClaw** — real file copies in `~/.openclaw/workspace/skills/`.
+- **Codex** — YAML-sanitized copies + symlinks in `~/.codex/skills/`. Codex's own native skills live alongside, untouched.
+- **Pi** — symlinks in `~/.pi/agent/skills/` to source repos. Pi's own native skills live alongside, untouched.
+- **Copilot** — `~/.copilot/config/skills → ~/.claude/skills` symlink, plus the `COPILOT_SKILLS_DIRS` env var.
+- **Hermes** — real copies into a dedicated `~/.hermes/skills/ai-skillweave/` category; Hermes's native toolsets and the openclaw-imports staging set stay untouched.
+
+ai-skillweave only ever delivers the **2,652-skill pool** — never the harness's own native skills, never the learned cache, never duplicates. Per-harness file-system counts (top-level entries, with symlinks followed) will look bigger because they include those native extras; that's a property of each harness's bundle, not of ai-skillweave.
 
 What's structural: **2,652 unique skills** flow to all 6 harnesses, drawn from 14 source repos — OpenClaw-Medical, operon, bioSkills, ECC, SciAgent, ToolUniverse, K-Dense, ClawBio, DeepMind, Bipartite, BioNeMo, Nature-Paper, Anthropic, and life-sciences — plus 105 imported `claude_extras` and the personal learned skills. See the README's "What Each Harness Gets" table for per-harness delivery details.
 

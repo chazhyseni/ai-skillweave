@@ -447,18 +447,18 @@ Skills are structured Markdown prompts (SKILL.md files) that tell AI agents *how
 
 ### What Each Harness Gets
 
-All six harnesses receive the same **2,652 unique skills** (the ai-skillweave pool). Counts below are top-level skill entries containing a direct `SKILL.md` — the real registered-skill count, not raw file counts (which can be inflated by nested example files and the 599-entry learned cache in `~/.claude/skills/learned/`).
+Every harness receives the same **2,652 unique skills** — the ai-skillweave pool. The table below describes how each harness receives them, not how many:
 
-| Harness | Skills delivered | Delivery |
-|---------|-----------------:|----------|
-| `claude` / `ollama launch claude` | **2,652** | Real-file copies in `~/.claude/skills/` (each skill a flat dir with `SKILL.md`). Plus 59 category-bucket dirs and a 599-entry learned cache. Top 50 learned skills injected via `lean-skills.txt` (~3K tokens) at launch. |
-| `ollama launch openclaw` | **2,652** | Real file copies in `~/.openclaw/workspace/skills/`. |
-| `ollama launch codex` | **2,652** + 657 native | YAML-sanitized copies + symlinks in `~/.codex/skills/`. Codex retains its own 657 native skills alongside the pool (3,309 entries total). |
-| `ollama launch pi` | **2,652** + 657 native | Symlinks in `~/.pi/agent/skills/` to source repos, plus 657 native Pi skills (3,309 entries total). |
-| `copilot` (Copilot CLI) | **2,652** | Bridged by `setup-copilot-skills.sh`: a `~/.copilot/config/skills → ~/.claude/skills` symlink plus the `COPILOT_SKILLS_DIRS` env var. |
-| Hermes (`~/.hermes/skills/`) | **2,652** | Real file copies into a dedicated `~/.hermes/skills/ai-skillweave/` category (the 2,652 pool); Hermes's native toolsets and its 917-entry `openclaw-imports` staging set stay untouched. |
+| Harness | Delivery |
+|---------|----------|
+| `claude` / `ollama launch claude` | Real-file copies in `~/.claude/skills/` (each skill a flat dir with `SKILL.md`). Top 50 learned skills injected via `lean-skills.txt` (~3K tokens) at launch. |
+| `ollama launch openclaw` | Real file copies in `~/.openclaw/workspace/skills/`. |
+| `ollama launch codex` | YAML-sanitized copies + symlinks in `~/.codex/skills/`. Codex's own native skills live alongside, untouched. |
+| `ollama launch pi` | Symlinks in `~/.pi/agent/skills/` to source repos. Pi's own native skills live alongside, untouched. |
+| `copilot` (Copilot CLI) | Bridged by `setup-copilot-skills.sh`: a `~/.copilot/config/skills → ~/.claude/skills` symlink plus the `COPILOT_SKILLS_DIRS` env var. |
+| Hermes (`~/.hermes/skills/`) | Real file copies into a dedicated `~/.hermes/skills/ai-skillweave/` category; Hermes's native toolsets and the openclaw-imports staging set stay untouched. |
 
-Every harness sees the **same 2,652 unique skills**. The "+ N native" counts are pre-existing skills that shipped with each harness (Codex and Pi ship their own skill libraries); ai-skillweave never overwrites or removes them.
+ai-skillweave only ever delivers the **2,652-skill pool** — never the harness's own native skills, never the learned cache, never duplicates. Per-harness file-system counts (top-level entries, with symlinks followed) will look bigger because they include those native extras; that's a property of each harness's bundle, not of ai-skillweave.
 
 Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
@@ -631,7 +631,7 @@ The key is **deferred loading**: skills are indexed (name only in the system pro
 
 | Layer | What's in context | Token cost |
 |-------|------------------|------------|
-| **Skill index** (always) | Every skill name in the available-skills list (2,652 unique ai-skillweave skills; plus each harness's own native skills — 657 extra in Codex/Pi, 59 category buckets + 599 learned in Claude) | ~7,500 tokens, cached after the first turn |
+| **Skill index** (always) | Every skill name in the available-skills list (2,652 unique ai-skillweave skills; Claude's index also lists its own native category buckets + learned cache alongside) | ~7,500 tokens, cached after the first turn |
 | **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill (top 50 by confidence) | ~3K tokens (hard cap) |
 | **Skill content** (on demand) | Full SKILL.md, loaded when you invoke a skill | 0 tokens unless used |
 
@@ -881,7 +881,7 @@ Skills are symlinked (not copied), so they load on-demand just like in Claude Co
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | 2,652 unique ai-skillweave skills (2,711 top-level entries incl. 59 category buckets) via native `/skills` + lean cache (top 50, ~3K tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
+| Skills injection | 2,652 unique ai-skillweave skills via native `/skills` + lean cache (top 50 learned, ~3K tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
