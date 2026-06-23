@@ -2,7 +2,7 @@
 
 Overview of all skills available through ai-skillweave, organized by source and category.
 
-**Total: 1,773 SKILL.md files in `~/.claude/skills/` on this system, comprising 1,249 immediate-subdir skills (from ECC + ClawBio + Anthropic + Codex curated + Hermes openclaw-imports corpus + K-Dense + Bipartite) + 550 in 63 GPTomics/bioSkills categories + 33 in `learned/.archive/` (historical learned skills, timestamp-suffixed by harness source) + ~41 misc. Per-source attribution by `skill-author:` frontmatter field:**
+**Total: 1,785 SKILL.md files in `~/.claude/skills/` on this system, comprising 1,260 immediate-subdir skills (from ECC + ClawBio + Anthropic + Codex curated + Hermes openclaw-imports corpus + K-Dense + Bipartite) + 550 in 63 GPTomics/bioSkills categories + 33 in `learned/.archive/` (historical learned skills, timestamp-suffixed by harness source) + ~42 misc. Per-source attribution by `skill-author:` frontmatter field:**
 
 | Source | Count | Provenance |
 |---|---|---|
@@ -19,13 +19,13 @@ Overview of all skills available through ai-skillweave, organized by source and 
 
 **Per-harness counts (machine-specific — different users will get slightly different totals based on which sources they include and their harness versions). All counts verified with `find -L` (which follows symlinks, the way a skill loader does) and a fresh `update-ecc.sh --force` run after the K-Dense gap fix in commit `46221f7`:**
 
-- **Claude: 1,773** (1,249 immediate + 550 depth-2 in 63 bioSkills categories + 33 in `learned/.archive/` + ~41 misc) — full library, native deferred loading via `/skills`. 0 symlinks (Claude uses real files only). All 107 K-Dense-authored skills are present. All 37 Bipartite skills are present (symlinks to `~/.claude-bipartite/skills/`).
-- **OpenClaw: 1,847** (real file copies, 0 symlinks). All SKILL.md at depth-1. All 107 K-Dense-authored skills are present (real copies via `claude_extras`). All 37 Bipartite skills are present.
-- **Codex: 1,859 effective** = 806 real SKILL.md copies + symlinks to source repos (ECC, Anthropic, Codex curated, Bipartite) + 5 Codex-bundled in `.system/` + K-Dense symlinks from `~/.claude/skills/` + misc. **0 broken symlinks.** All 37 Bipartite skills flow to Codex.
-- **Pi: 1,855 effective** = 61 curated real SKILL.md dirs + symlinks to skills in source repos + 37 Bipartite + K-Dense + misc. **0 broken symlinks.** All 37 Bipartite skills flow to Pi.
-- **Copilot: 1,773** via symlink to `~/.claude/skills/`. All 107 K-Dense skills are present (inherited from Claude). All 37 Bipartite skills are present (inherited from Claude).
+- **Claude: 1,785** (1,260 immediate + 550 depth-2 in 63 bioSkills categories + 33 in `learned/.archive/` + ~42 misc) — full library, native deferred loading via `/skills`. 0 symlinks (Claude uses real files only). All 147 K-Dense skills are present. All 37 Bipartite skills are present (symlinks to `~/.claude-bipartite/skills/`).
+- **OpenClaw: 1,859** (real file copies, 0 symlinks). All SKILL.md at depth-1. All 147 K-Dense skills are present (real copies). All 37 Bipartite skills are present.
+- **Codex: 1,863 effective** = 806 real SKILL.md copies + symlinks to source repos (ECC, Anthropic, Codex curated, Bipartite, K-Dense) + 5 Codex-bundled in `.system/` + misc. **0 broken symlinks.** All 147 K-Dense skills flow to Codex.
+- **Pi: 1,859 effective** = 61 curated real SKILL.md dirs + symlinks to skills in source repos + 37 Bipartite + 147 K-Dense + misc. **0 broken symlinks.** All 147 K-Dense skills flow to Pi.
+- **Copilot: 1,785** via symlink to `~/.claude/skills/`. All 147 K-Dense skills are present (inherited from Claude). All 37 Bipartite skills are present (inherited from Claude).
 
-What's structural (true for every install of ai-skillweave): the pool exceeds **1,000 skills across all 5 harnesses**, served from 6 upstream repos (ECC + K-Dense + ClawBio + bioSkills + Anthropic + OpenAI Codex curated) plus Hermes's openclaw-imports staging corpus. **As of commit `46221f7`, all 107 K-Dense-authored skills flow to all 5 harnesses** — the `claude_extras` supplemental scan in `update-ecc.sh` picks them up from `~/.claude/skills/`, and the Pi `os.path.lexists()` fix ensures the new symlinks replace any stale ones. See the README's "What Each Harness Gets" table for delivery details per harness.
+What's structural (true for every install of ai-skillweave): the pool exceeds **1,000 skills across all 5 harnesses**, served from 7 upstream repos (ECC + K-Dense + ClawBio + bioSkills + Anthropic + OpenAI Codex curated + Bipartite) plus Hermes's openclaw-imports staging corpus. **As of commit `46221f7`, all K-Dense skills flow to all 5 harnesses** — the `claude_extras` supplemental scan in `update-ecc.sh` picks them up from `~/.claude/skills/`, and the Pi `os.path.lexists()` fix ensures the new symlinks replace any stale ones. See the README's "What Each Harness Gets" table for delivery details per harness.
 
 ---
 

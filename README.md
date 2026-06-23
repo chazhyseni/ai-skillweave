@@ -167,7 +167,7 @@ ollama launch copilot     # Copilot CLI + MCP servers
 | **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
 | **Claude Code skills** | Copies all skill sources (ECC, K-Dense, ClawBio, bioSkills, Anthropic, Codex) to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
-| **Lean skills cache** | Top 50 learned skills by confidence at `~/.claude/skills-cache/lean-skills.txt` — name + one operating principle per skill (~5K tokens, capped at 50 to keep injection reasonable). Full library cache (`combined-skills.txt`, 4.9 MB / ~1.23M tokens) kept for reference but never injected — Claude's 200K window means the full library would overflow every session |
+| **Lean skills cache** | Top 50 learned skills by confidence at `~/.claude/skills-cache/lean-skills.txt` — name + one operating principle per skill (~3K tokens, capped at 50 to keep injection reasonable). Full library cache (`combined-skills.txt`, 7.2 MB / ~1.8M tokens) kept for reference but never injected — Claude's 200K window means the full library would overflow every session |
 | **bioSkills** | 550 bioinformatics skills (63 categories) from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) cloned into `~/.claude/skills/` — available on-demand via the Skill tool, NOT injected into every session. Categories: variant-calling, single-cell, spatial-transcriptomics, phylogenetics, atac-seq, crispr-screens, workflows, and 56 more |
 | **Beads** | `bd` CLI + `beads-mcp` MCP server — cross-session work item tracking. `bd prime` gives AI-optimised project context at session start |
 | **Learning pipeline scripts** | Copies `sync-learned-skills.sh`, `extract-conversation-skills.py`, `safe-install.sh` to `~/.claude/scripts/` so `learn-sync`/`learn-stats`/`learn-prune` aliases work from any directory |
@@ -642,7 +642,7 @@ The key is **deferred loading**: skills are indexed (name only in system prompt,
 
 | Layer | What's in context | Token cost |
 |-------|------------------|------------|
-| **Skill index** (always) | ~1.7K skill names in the available-skills list | ~7,500 tokens, cached after first turn |
+| **Skill index** (always) | ~1.8K skill names in the available-skills list | ~7,500 tokens, cached after first turn |
 | **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill (top 50 by confidence) | ~5K tokens (capped; without cap, 599 skills = ~37K tokens) |
 | **Skill content** (on demand) | Full SKILL.md loaded when you invoke a skill | 0 tokens unless used |
 
@@ -658,7 +658,7 @@ Session with no skills invoked: pay only for the index, not the content
 
 ### How skills load in each harness
 
-All harnesses receive the same set of source skills. Codex and Pi use symlinks to source repos for skills already in valid format; the symlink counts in each harness differ based on how the install picked which sources to symlink vs. copy. The 64-char directory-name limit in Codex is **defensive only** — the current corpus has zero skills over 64 chars, so no truncation actually happens. See the [What Each Harness Gets](#what-each-harness-gets) table above for delivery details. Key distinction: Claude Code uses **native deferred loading** — skill content is fetched on demand, so ~1.7K skill names cost ~7,500 tokens but the full content (2,000+ tokens per skill) is only loaded when a skill is actually invoked.
+All harnesses receive the same set of source skills. Codex and Pi use symlinks to source repos for skills already in valid format; the symlink counts in each harness differ based on how the install picked which sources to symlink vs. copy. The 64-char directory-name limit in Codex is **defensive only** — the current corpus has zero skills over 64 chars, so no truncation actually happens. See the [What Each Harness Gets](#what-each-harness-gets) table above for delivery details. Key distinction: Claude Code uses **native deferred loading** — skill content is fetched on demand, so ~1.8K skill names cost ~7,500 tokens but the full content (2,000+ tokens per skill) is only loaded when a skill is actually invoked.
 
 ### lean-skills.txt (for `claude` CLI + ollama sessions)
 
@@ -666,8 +666,8 @@ Injects a brief summary of your personal learned skills so the model knows they 
 
 | File | Size | Tokens | Used for |
 |------|------|--------|----------|
-| `lean-skills.txt` | 205 bytes | ~51 | Injected via `--append-system-prompt-file` at session start |
-| `combined-skills.txt` | 4.9 MB | ~1.23M | Reference / local search only — never injected |
+| `lean-skills.txt` | ~13 KB | ~3.3K | Injected via `--append-system-prompt-file` at session start (top 50 learned skills by confidence) |
+| `combined-skills.txt` | 7.2 MB | ~1.8M | Reference / local search only — never injected |
 
 **Prompt caching:** Active via `tengu_system_prompt_global_cache: true` in `~/.claude.json` — the system prompt (including skill index + lean-skills) is cached after session 1, costing ~90% less on subsequent turns.
 

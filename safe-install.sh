@@ -1132,7 +1132,7 @@ Skills loaded:
   - ECC skills:              $ECC_COUNT
   - Anthropic skills:        $ANTHROPIC_COUNT
   - Codex skills:            $CODEX_COUNT
-  - Scientific skills:       $SCIENCE_COUNT (K-Dense Agent Skills — upstream snapshot currently empty; 107 K-Dense-authored skills already in ~/.claude/skills/ via Hermes openclaw-imports)
+  - Scientific skills:       $SCIENCE_COUNT (K-Dense Agent Skills — 147 skills in upstream repo; 107 tagged skill-author: K-Dense Inc.)
   - Bioinformatics (ClawBio):$BIO_COUNT
   - Bioinformatics (bioSkills):$BIOSKILLS_COUNT (GPTomics/bioSkills)
   - Bipartite:              $BIPARTITE_COUNT (research workflow skills)
