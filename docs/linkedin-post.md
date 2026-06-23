@@ -8,7 +8,7 @@ MCP servers extend what it can do: persistent memory, real-time docs lookup, bro
 
 And it learns. Corrections get captured in real-time via hooks and distilled into reusable skills through a 4-stage pipeline — **batched LLM distillation runs 30-50× faster than naive per-group calls** (~580 groups in 2-5 minutes instead of 4.8 hours). You correct once — every harness remembers.
 
-The goal isn't using five agents. It's having one harness that works with whatever agent you choose.
+The goal isn't using six agents. It's having one harness that works with whatever agent you choose.
 
 github.com/chazhyseni/ai-skillweave
 
