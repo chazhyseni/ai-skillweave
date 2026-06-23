@@ -356,9 +356,16 @@ install_science_skills() {
     mkdir -p "$SCIENCE_DIR"
     cd /tmp
     if git clone --depth 1 https://github.com/K-Dense-AI/scientific-agent-skills.git science-temp 2>/dev/null; then
-        # Copy skill directories (each contains SKILL.md + optional references/scripts/assets)
-        mkdir -p "$SCIENCE_DIR/scientific-skills"
-        cp -r science-temp/scientific-skills/* "$SCIENCE_DIR/scientific-skills/" 2>/dev/null || true
+        # K-Dense reorganized: skills moved from scientific-skills/ to skills/.
+        # Try skills/ first (current upstream layout), fall back to
+        # scientific-skills/ (old layout) for backward compatibility.
+        if [ -d "science-temp/skills" ]; then
+            mkdir -p "$SCIENCE_DIR/scientific-skills"
+            cp -r science-temp/skills/* "$SCIENCE_DIR/scientific-skills/" 2>/dev/null || true
+        elif [ -d "science-temp/scientific-skills" ]; then
+            mkdir -p "$SCIENCE_DIR/scientific-skills"
+            cp -r science-temp/scientific-skills/* "$SCIENCE_DIR/scientific-skills/" 2>/dev/null || true
+        fi
         SCIENCE_COUNT=$(find "$SCIENCE_DIR/scientific-skills" -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
         rm -rf science-temp
         success "K-Dense scientific skills installed: $SCIENCE_DIR ($SCIENCE_COUNT skills)"
