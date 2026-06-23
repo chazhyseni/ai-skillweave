@@ -104,6 +104,30 @@ Unlike ECC and K-Dense skills which are prompt-only `SKILL.md` files, ClawBio sk
 ClawBio is installed by default (`--with-bio` is on). To update, re-run with `--with-bio` to re-clone the latest from GitHub.
 
 
+## Research Workflow Skills — Bipartite
+
+> **37 research workflow skills from [matsen/bipartite](https://github.com/matsen/bipartite)** — manuscript sessions, literature management, EPIC orchestration, PR review, and workflow coordination. Also installs 16 subagent definitions (issue-lead, code-reviewers, proof-readers, tex-checkers, etc.) into `~/.claude/agents/`.
+
+Bipartite is a Go CLI (`bip`) plus Claude Code skills for connecting research programs to the outside world. It operates on a "nexus" (a git-backed JSONL directory) that stores your paper library, project context, and workflow coordination data. The skills cover five areas:
+
+- **Manuscript sessions** (`bip-ms`, `bip-ms-poll`, `bip-ms-audit`, `bip-ms-sweep`, `bip-ms-tuckin`) — cold-start dashboards for TeX repositories
+- **Literature management** (`bip-lit`, `bip-lit-edges`, `bip-lit-extract`, `bip-lit-import`) — search, import, cite, and build knowledge graphs from Semantic Scholar + Asta
+- **EPIC orchestration** (`bip-epic`, `bip-epic-spawn`, `bip-epic-poll`, `bip-epic-handoff`, `bip-epic-check`, `bip-epic-tuckin`, `bip-epic-prepare-reboot`, `bip-epic-recover`) — conductor/worker pattern for managing Claude Code sessions across clones
+- **Issue & PR management** (`bip-issue-check`, `bip-issue-file`, `bip-issue-next`, `bip-issue-update`, `bip-issue-work`, `bip-pr-check`, `bip-pr-review`, `bip-pr-land`) — GitHub issue lifecycle + pre-merge quality checklist
+- **Workflow coordination** (`bip-checkin`, `bip-digest`, `bip-narrative`, `bip-spawn`, `bip-scout`, `bip-board`, `bip-comment-check`, `bip-decay-audit`, `bip-kaizen`, `bip-plan`, `bip-marimo`, `bip-tmux`) — cross-repo check-ins, Slack digests, server resource scouting
+
+**Installation** (requires Go 1.24+):
+
+```bash
+git clone https://github.com/matsen/bipartite ~/.claude-bipartite
+cd ~/.claude-bipartite
+make install
+```
+
+This installs the `bip` CLI to `~/go/bin/bip` and symlinks 37 skills + 16 agents into `~/.claude/`. The `update-ecc.sh` sync script automatically picks up bipartite as a source and distributes the skills to all 5 harnesses.
+
+See [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) → Source 8 for the full list of all 37 skills grouped by functional area.
+
 
 ---
 
@@ -431,7 +455,7 @@ Skills are structured Markdown prompts (SKILL.md files) that tell AI agents *how
 | SkillGraph bioinformatics | dynamic | From `variomeanalytics/bioinformatics-agent-skills` via MCP server (not on-disk) |
 | Anthropic official | 17 SKILL.md dirs | From Anthropic's official skills library (in `.curated/`) |
 | OpenAI Codex curated | 44 SKILL.md dirs | From OpenAI's Codex skills collection (39 `.curated/` + 5 `.system/`) — 38 unique flow into Claude |
-| Bipartite | 37 SKILL.md dirs | From `matsen/bipartite` — research workflow skills (manuscript sessions, EPIC orchestration, literature, PR review) |
+| Bipartite | 37 SKILL.md dirs | From [matsen/bipartite](https://github.com/matsen/bipartite) — research workflow skills (manuscript sessions, EPIC orchestration, literature, PR review) |
 | Hermes openclaw-imports (local) | 917 SKILL.md dirs | From `~/.hermes/skills/openclaw-imports/` — staging area aggregating ECC + K-Dense + community submissions; not a separate source repo |
 | Personal learned | ~10 (grows) | BMO-style real-time capture (corrections detected live via hooks) + **batched** 4-stage pipeline (30-50× faster than single-call distillation) |
 

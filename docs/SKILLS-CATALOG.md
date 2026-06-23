@@ -323,7 +323,7 @@ From [variomeanalytics/bioinformatics-agent-skills](https://github.com/variomean
 
 ---
 
-## Source 7: Bipartite — 37 skills
+## Source 8: Bipartite — 37 skills
 
 From [matsen/bipartite](https://github.com/matsen/bipartite) — a research workflow CLI (`bip`) + Claude Code skills for connecting research programs to the outside world. Bipartite operates on a "nexus" (a git-backed JSONL directory) that stores your paper library, project context, and workflow coordination data.
 
@@ -381,7 +381,7 @@ The 37 skills cover five functional areas:
 
 **Installation:** `git clone https://github.com/matsen/bipartite ~/.claude-bipartite && cd ~/.claude-bipartite && make install` (requires Go 1.24+ for the `bip` CLI).
 
-## Source 8: Personal Learned Skills — varies
+## Source 9: Personal Learned Skills — varies
 
 Auto-extracted generalizable patterns from your own sessions via a 4-stage ALMA-inspired pipeline. Unlike all other sources, these skills evolve over time — the more you correct your harness, the better it gets.
 
