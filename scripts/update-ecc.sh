@@ -343,6 +343,12 @@ clawbio_dir = os.path.join(home, ".claude-clawbio-skills", "skills")
 # GPTomics/bioSkills are installed directly into ~/.claude/skills/<category>/<skill>/SKILL.md
 # They live at depth-3 (category/skill/SKILL.md), unlike depth-2 skills (skill/SKILL.md)
 bioskills_dir = os.path.join(home, ".claude", "skills")
+# Bipartite (matsen/bipartite) — research workflow CLI + Claude Code skills
+# 37 skills for manuscript sessions, literature management, EPIC orchestration,
+# PR review, and workflow coordination. Installed via `make install` which
+# symlinks skills/ and agents/ into ~/.claude/. The skills live at depth-2
+# (skill_name/SKILL.md) and are Agent Skills spec compliant.
+bipartite_dir = os.path.join(home, ".claude-bipartite", "skills")
 
 # Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated + K-Dense
 def collect_skill_dirs(base_dir, max_depth=None):
@@ -396,6 +402,7 @@ codex_curated_skills = collect_skill_dirs(codex_curated_dir)
 science_skills = collect_skill_dirs(science_dir)
 clawbio_skills = collect_skill_dirs(clawbio_dir)
 bioskills = collect_bioskills(bioskills_dir)
+bipartite_skills = collect_skill_dirs(bipartite_dir)
 
 # Merge all sources (ECC has highest priority on name conflicts)
 all_skills = {}
@@ -404,6 +411,7 @@ all_skills.update(bioskills)              # bio skills (before clawbio/science/e
 all_skills.update(anthropic_skills)       # medium-low priority
 all_skills.update(clawbio_skills)         # medium priority
 all_skills.update(science_skills)         # medium-high priority
+all_skills.update(bipartite_skills)       # bipartite (same level as science)
 all_skills.update(ecc_skills)             # highest priority (ECC wins)
 
 # Supplemental: pick up skills that live in ~/.claude/skills/ but aren't
@@ -642,7 +650,7 @@ if os.path.isdir(os.path.join(home, ".claude")):
     print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
 total = len(all_skills)
-print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")
