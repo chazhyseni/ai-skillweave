@@ -104,29 +104,48 @@ fi
 
 [[ "$*" == *"--check"* ]] && exit 0
 
+# --no-prune: skip the orphan-removal pass (additive-only sync). The manifest is
+# still written, so a later default run prunes exactly. Prune is ON by default.
+ECC_NO_PRUNE=0
+[[ "$*" == *"--no-prune"* ]] && ECC_NO_PRUNE=1
+export ECC_NO_PRUNE
+
 # =============================================================================
-# Step 1b: Pull every other skill source repo to latest (ECC handled above),
-# so a sync is COMPLETE — newest skills from every upstream, not just ECC.
-# bioSkills lives in-place under ~/.claude/skills and is intentionally NOT
-# git-pulled here (that dir also holds synced + learned skills).
+# Step 1b: Ensure every other skill source is present and current. ECC is handled
+# above; K-Dense, ClawBio, and the curated set are handled by safe-install.sh.
+# The repos below are CLONED if missing and fast-forwarded if already present —
+# this is what lets a fresh `install.sh` reproduce the full skill set on any
+# machine, not just the four sources safe-install.sh clones. bioSkills lives
+# in-place under ~/.claude/skills and is installed by scripts/install-bioskills.sh.
 # =============================================================================
-log "Updating skill source repos..."
+log "Ensuring skill source repos are present and current..."
+# Each entry is "<dir>|<git url>": clone if missing, fast-forward if present.
 SOURCE_REPOS=(
-    "$HOME/.claude-medical-skills"
-    "$HOME/.claude-operon-skills"
-    "$HOME/.claude-tooluniverse"
-    "$HOME/.claude-sciagent-skills"
-    "$HOME/.claude-deepmind-skills"
-    "$HOME/.claude-bionemo-skills"
-    "$HOME/.claude-clawbio-skills"
-    "$HOME/.claude-scientific-skills"
-    "$HOME/.claude-bipartite"
-    "$HOME/.claude-life-sciences"
-    "$HOME/.claude-curated-skills"
+    "$HOME/.claude-medical-skills|https://github.com/FreedomIntelligence/OpenClaw-Medical-Skills.git"
+    "$HOME/.claude-operon-skills|https://github.com/swaruplab/operon.git"
+    "$HOME/.claude-tooluniverse|https://github.com/mims-harvard/ToolUniverse.git"
+    "$HOME/.claude-sciagent-skills|https://github.com/jaechang-hits/SciAgent-Skills.git"
+    "$HOME/.claude-deepmind-skills|https://github.com/google-deepmind/science-skills.git"
+    "$HOME/.claude-bionemo-skills|https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit.git"
+    "$HOME/.claude-nature-paper-skills|https://github.com/Boom5426/Nature-Paper-Skills.git"
+    "$HOME/.claude-life-sciences|https://github.com/anthropics/life-sciences.git"
+    "$HOME/.claude-bipartite|https://github.com/matsen/bipartite.git"
 )
+SRC_CLONED=0
 SRC_UPDATED=0
-for repo in "${SOURCE_REPOS[@]}"; do
-    [ -d "$repo/.git" ] || continue
+for entry in "${SOURCE_REPOS[@]}"; do
+    repo="${entry%%|*}"
+    url="${entry##*|}"
+    if [ ! -d "$repo" ]; then
+        if git clone --depth 1 --quiet "$url" "$repo" 2>/dev/null; then
+            success "Cloned $(basename "$repo")"
+            SRC_CLONED=$((SRC_CLONED + 1))
+        else
+            warn "Could not clone $(basename "$repo") from $url — skipped"
+        fi
+        continue
+    fi
+    [ -d "$repo/.git" ] || continue   # file-copy source (no .git) — leave as-is
     before=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
     if git -C "$repo" pull --ff-only --quiet 2>/dev/null; then
         after=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
@@ -138,7 +157,8 @@ for repo in "${SOURCE_REPOS[@]}"; do
         warn "$(basename "$repo"): could not fast-forward (local changes or diverged) — left as-is"
     fi
 done
-[ "$SRC_UPDATED" -eq 0 ] && success "All skill source repos already up to date"
+[ "$SRC_CLONED" -gt 0 ] && success "Cloned $SRC_CLONED new skill source repo(s)"
+[ "$SRC_CLONED" -eq 0 ] && [ "$SRC_UPDATED" -eq 0 ] && success "All skill source repos already present and up to date"
 
 CURATED_DIR="$HOME/.claude-curated-skills"
 
@@ -437,6 +457,11 @@ lifesci_dir = os.path.join(home, ".claude-life-sciences")
 # and drug-discovery workflows. Skills span the whole repo (nim-skills/,
 # open-models-skills/, library-skills/, workflows/, plugins/).
 bionemo_dir = os.path.join(home, ".claude-bionemo-skills")
+# Nature-Paper-Skills (Boom5426/Nature-Paper-Skills) — 18 Agent Skills for
+# Nature-style manuscript work: drafting, revision, figure planning, citation
+# verification, data-availability, submission audit, rebuttal, and the
+# nature-portfolio playbook. Skills live under skills/{core,venue,research,review,optional}/.
+naturepaper_dir = os.path.join(home, ".claude-nature-paper-skills", "skills")
 
 # Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated + K-Dense
 def collect_skill_dirs(base_dir, max_depth=None):
@@ -498,6 +523,7 @@ medical_skills = collect_skill_dirs(medical_dir)
 operon_skills = collect_skill_dirs(operon_dir)
 lifesci_skills = collect_skill_dirs(lifesci_dir)
 bionemo_skills = collect_skill_dirs(bionemo_dir)
+naturepaper_skills = collect_skill_dirs(naturepaper_dir)
 
 # Merge all sources (ECC has highest priority on name conflicts)
 all_skills = {}
@@ -509,6 +535,7 @@ all_skills.update(medical_skills)         # medical/clinical skills
 all_skills.update(tooluniverse_skills)    # ToolUniverse drug discovery
 all_skills.update(lifesci_skills)         # Anthropic life-sciences
 all_skills.update(bionemo_skills)         # NVIDIA BioNeMo GPU-accelerated bio
+all_skills.update(naturepaper_skills)     # Nature-style manuscript workflow skills
 all_skills.update(deepmind_skills)        # DeepMind science skills
 all_skills.update(anthropic_skills)       # medium-low priority
 all_skills.update(clawbio_skills)         # medium priority
@@ -565,6 +592,7 @@ _source_roots = [os.path.realpath(os.path.join(home, d)) for d in (
     ".claude-tooluniverse", ".claude-sciagent-skills", ".claude-deepmind-skills",
     ".claude-bionemo-skills", ".claude-clawbio-skills", ".claude-scientific-skills",
     ".claude-bipartite", ".claude-life-sciences", ".claude-curated-skills",
+    ".claude-nature-paper-skills",
     os.path.join(".claude", "skills"),
 )]
 
@@ -586,7 +614,8 @@ def _remove_entry(path):
         return False
 
 _pruned = 0
-for _hdir in _harness_dirs:
+_no_prune = os.environ.get("ECC_NO_PRUNE") == "1"
+for _hdir in ([] if _no_prune else _harness_dirs):
     _is_codex = (_hdir == codex_skills)
     for _entry in os.listdir(_hdir):
         if _entry == "learned" or _entry.startswith("."):
@@ -829,7 +858,7 @@ if os.path.isdir(os.path.join(home, ".claude")):
     print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
 total = len(all_skills)
-print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) + DeepMind({len(deepmind_skills)}) + SciAgent({len(sciagent_skills)}) + ToolUniverse({len(tooluniverse_skills)}) + Medical({len(medical_skills)}) + operon({len(operon_skills)}) + life-sciences({len(lifesci_skills)}) + BioNeMo({len(bionemo_skills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) + DeepMind({len(deepmind_skills)}) + SciAgent({len(sciagent_skills)}) + ToolUniverse({len(tooluniverse_skills)}) + Medical({len(medical_skills)}) + operon({len(operon_skills)}) + life-sciences({len(lifesci_skills)}) + BioNeMo({len(bionemo_skills)}) + NaturePaper({len(naturepaper_skills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")

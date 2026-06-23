@@ -4,7 +4,7 @@
 
 One-command setup for all your Ollama agent harnesses: proper MCP servers, web tools, harness-specific configs — all portable and reproducible. Learns from your corrections automatically via real-time hooks and a batched learning pipeline that distills conversations into skills 30-50× faster than naive LLM calls.
 
-**2,635 unique skills, delivered to all 5 harnesses** from 14 upstream repos: [OpenClaw-Medical](https://github.com/FreedomIntelligence/OpenClaw-Medical-Skills) (896 clinical), [operon](https://github.com/swaruplab/operon) (556 protocols), [bioSkills](https://github.com/GPTomics/bioSkills) (546, 63 categories), [ECC](https://github.com/affaan-m/everything-claude-code) (272), [SciAgent](https://github.com/jaechang-hits/SciAgent-Skills) (197), [ToolUniverse](https://github.com/mims-harvard/ToolUniverse) (150 drug discovery), [K-Dense](https://github.com/K-Dense-AI/scientific-agent-skills) (147), [ClawBio](https://github.com/ClawBio/ClawBio) (90), [DeepMind science-skills](https://github.com/google-deepmind/science-skills) (37), [Bipartite](https://github.com/matsen/bipartite) (37), [BioNeMo](https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit) (35 GPU-accelerated bio), [Anthropic](https://github.com/anthropics/skills) (17), [Codex curated](https://github.com/openai/skills) (44), [life-sciences](https://github.com/anthropics/life-sciences) (6). See [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for the full per-source breakdown.
+**2,652 unique skills, delivered to all 5 harnesses** from 15 upstream repos: [OpenClaw-Medical](https://github.com/FreedomIntelligence/OpenClaw-Medical-Skills) (896 clinical), [operon](https://github.com/swaruplab/operon) (556 protocols), [bioSkills](https://github.com/GPTomics/bioSkills) (546, 63 categories), [ECC](https://github.com/affaan-m/everything-claude-code) (272), [SciAgent](https://github.com/jaechang-hits/SciAgent-Skills) (197), [ToolUniverse](https://github.com/mims-harvard/ToolUniverse) (150 drug discovery), [K-Dense](https://github.com/K-Dense-AI/scientific-agent-skills) (147), [ClawBio](https://github.com/ClawBio/ClawBio) (90), [DeepMind science-skills](https://github.com/google-deepmind/science-skills) (37), [Bipartite](https://github.com/matsen/bipartite) (37), [BioNeMo](https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit) (35 GPU-accelerated bio), [Nature-Paper](https://github.com/Boom5426/Nature-Paper-Skills) (18 manuscript), [Anthropic](https://github.com/anthropics/skills) (17), [Codex curated](https://github.com/openai/skills) (44), [life-sciences](https://github.com/anthropics/life-sciences) (6). See [`docs/SKILLS-CATALOG.md`](docs/SKILLS-CATALOG.md) for the full per-source breakdown.
 
 ---
 
@@ -25,18 +25,19 @@ One-command setup for all your Ollama agent harnesses: proper MCP servers, web t
 | [DeepMind](https://github.com/google-deepmind/science-skills) | 37 | 37 | AlphaGenome, AlphaFold DB, UniProt, Ensembl, gnomAD, GTEx, ClinVar, ChEMBL, PubChem, PDB |
 | [Bipartite](https://github.com/matsen/bipartite) | 37 | 37 | Research workflow CLI (`bip`) — manuscripts, literature, EPIC orchestration, PR review (+ 16 subagent definitions) |
 | [BioNeMo](https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit) | 35 | 33 | NVIDIA GPU-accelerated bio: Boltz-2, OpenFold2/3, RFdiffusion, ProteinMPNN, DiffDock, MolMIM, GenMol, Evo2, MSA-Search, Parabricks |
+| [Nature-Paper](https://github.com/Boom5426/Nature-Paper-Skills) | 18 | 17 | Nature-style manuscript workflow: drafting, revision, figure planning, citation/reference audit, data-availability, submission audit, rebuttal, Nature portfolio playbook |
 | [Anthropic](https://github.com/anthropics/skills) | 17 | 13 | Official Anthropic reference skills |
 | [life-sciences](https://github.com/anthropics/life-sciences) | 6 | 5 | Single-cell RNA QC, Nextflow development, clinical-trial protocol, scientific problem selection |
 | [Codex curated](https://github.com/openai/skills) | 44 | 0 | OpenAI Codex curated skills — live under hidden dirs and overlap ECC, so 0 net-new to the pool; ship natively with the Codex harness |
 
-**Total: 2,635 unique skills** delivered to all 5 harnesses. On-disk counts overlap across sources; *net-new* is each source's deduplicated contribution (the net-new column plus 105 imported `claude_extras` sums to 2,635). Two further sources are queried live rather than installed on disk:
+**Total: 2,652 unique skills** delivered to all 5 harnesses. On-disk counts overlap across sources; *net-new* is each source's deduplicated contribution (the net-new column plus 105 imported `claude_extras` sums to 2,652). Two further sources are queried live rather than installed on disk:
 
 | Source | Delivery | Notes |
 |--------|----------|-------|
 | [SkillGraph](https://github.com/variomeanalytics/bioinformatics-agent-skills) | MCP-served | Bioinformatics knowledge graph via the `skillgraph` MCP server — queried on demand, never on disk |
 | Personal learned | grows | Auto-extracted from your own conversation corrections via the batched 4-stage pipeline |
 
-`ai-skillweave`'s core contribution is **cross-harness delivery**: it merges 14 skill libraries — most built for Claude Code or the portable [Agent Skills](https://agentskills.io/) format — into one deduplicated pool, then installs that pool into each harness's *native* skills directory, in the on-disk format that harness expects (real files, symlinks, or YAML-sanitized copies as needed). The same 2,635 skills then load in Claude Code, OpenClaw, Pi, Codex, and Copilot — regardless of launch method.
+`ai-skillweave`'s core contribution is **cross-harness delivery**: it merges 15 skill libraries — most built for Claude Code or the portable [Agent Skills](https://agentskills.io/) format — into one deduplicated pool, then installs that pool into each harness's *native* skills directory, in the on-disk format that harness expects (real files, symlinks, or YAML-sanitized copies as needed). The same 2,652 skills then load in Claude Code, OpenClaw, Pi, Codex, and Copilot — regardless of launch method.
 
 ---
 
@@ -167,7 +168,7 @@ ollama launch copilot     # Copilot CLI + MCP servers
 | **Copilot CLI** | Configures MCP servers (including beads) in `~/.copilot/mcp-config.json` |
 | **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
-| **Claude Code skills** | Copies all 14 skill sources (OpenClaw-Medical, operon, bioSkills, ECC, SciAgent, ToolUniverse, K-Dense, ClawBio, DeepMind, Bipartite, BioNeMo, Anthropic, life-sciences, Codex curated) to `~/.claude/skills/` — 2,635 unique skills, visible via `/skills`, works with any launch method |
+| **Claude Code skills** | Copies all 15 skill sources (OpenClaw-Medical, operon, bioSkills, ECC, SciAgent, ToolUniverse, K-Dense, ClawBio, DeepMind, Bipartite, BioNeMo, Nature-Paper, Anthropic, life-sciences, Codex curated) to `~/.claude/skills/` — 2,652 unique skills, visible via `/skills`, works with any launch method |
 | **Lean skills cache** | Top 50 learned skills by confidence in `~/.claude/skills-cache/lean-skills.txt` (~13 KB, ~3K tokens, capped), injected at session start. Full library cache (`combined-skills.txt`, ~7 MB) is kept for local search only — never injected |
 | **bioSkills** | 546 bioinformatics skills (63 categories) from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) cloned into `~/.claude/skills/` — available on demand via the Skill tool, NOT injected into every session. Categories: variant-calling, single-cell, spatial-transcriptomics, phylogenetics, atac-seq, crispr-screens, workflows, and 56 more |
 | **Beads** | `bd` CLI + `beads-mcp` MCP server — cross-session work item tracking. `bd prime` gives AI-optimised project context at session start |
@@ -449,13 +450,13 @@ Skills are structured Markdown prompts (SKILL.md files) that tell AI agents *how
 
 | Harness | Files delivered | Delivery |
 |---------|----------------:|----------|
-| `claude` / `ollama launch claude` | 3,248 | Native `~/.claude/skills/` — loaded on demand via `/skills`. Top 50 learned skills injected via `lean-skills.txt` (~3K tokens) at launch. |
-| `ollama launch openclaw` | 3,293 | Real file copies in `~/.openclaw/workspace/skills/`. |
-| `ollama launch codex` | 3,301 | YAML-sanitized copies + symlinks in `~/.codex/skills/`. Codex flattens depth-3 to depth-1; the 64-char directory-name limit is defensive (no current skill exceeds it). |
-| `ollama launch pi` | 3,328 | Symlinks in `~/.pi/agent/skills/` to source repos, plus 61 Pi-specific curated copies. |
-| `copilot` (Copilot CLI) | 3,248 | Bridged by `setup-copilot-skills.sh`: a `~/.copilot/config/skills → ~/.claude/skills` symlink plus the `COPILOT_SKILLS_DIRS` env var. |
+| `claude` / `ollama launch claude` | 3,265 | Native `~/.claude/skills/` — loaded on demand via `/skills`. Top 50 learned skills injected via `lean-skills.txt` (~3K tokens) at launch. |
+| `ollama launch openclaw` | 3,310 | Real file copies in `~/.openclaw/workspace/skills/`. |
+| `ollama launch codex` | 3,318 | YAML-sanitized copies + symlinks in `~/.codex/skills/`. Codex flattens depth-3 to depth-1; the 64-char directory-name limit is defensive (no current skill exceeds it). |
+| `ollama launch pi` | 3,345 | Symlinks in `~/.pi/agent/skills/` to source repos, plus 61 Pi-specific curated copies. |
+| `copilot` (Copilot CLI) | 3,265 | Bridged by `setup-copilot-skills.sh`: a `~/.copilot/config/skills → ~/.claude/skills` symlink plus the `COPILOT_SKILLS_DIRS` env var. |
 
-All five draw from the same **2,635 unique skills**. The per-harness file counts exceed 2,635 because each also includes that harness's native/bundled skills, the learned-skills cache, and a few duplicate-name copies the install retains — they are file counts, not unique-skill counts.
+All five draw from the same **2,652 unique skills**. The per-harness file counts exceed 2,652 because each also includes that harness's native/bundled skills, the learned-skills cache, and a few duplicate-name copies the install retains — they are file counts, not unique-skill counts.
 
 Native `~/.claude/skills/` installation means skills are visible via Claude Code's `/skills` command and load **regardless of launch method** (direct CLI, `ollama launch`, VSCode extension).
 
@@ -628,7 +629,7 @@ The key is **deferred loading**: skills are indexed (name only in the system pro
 
 | Layer | What's in context | Token cost |
 |-------|------------------|------------|
-| **Skill index** (always) | Every skill name in the available-skills list (2,635 unique; ~3,200 per harness with duplicates) | ~7,500 tokens, cached after the first turn |
+| **Skill index** (always) | Every skill name in the available-skills list (2,652 unique; ~3,300 per harness with duplicates) | ~7,500 tokens, cached after the first turn |
 | **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill (top 50 by confidence) | ~3K tokens (hard cap) |
 | **Skill content** (on demand) | Full SKILL.md, loaded when you invoke a skill | 0 tokens unless used |
 
@@ -644,7 +645,7 @@ No skills invoked this session: you pay for the index only, never the content.
 
 ### How skills load in each harness
 
-All five harnesses receive the same 2,635-skill pool. Codex and Pi symlink to source repos for skills already in valid format; the symlink-vs-copy mix differs per harness based on which sources the install chose to symlink. Codex's 64-char directory-name limit is **defensive only** — no skill in the current corpus exceeds it, so no truncation occurs. See the [What Each Harness Gets](#what-each-harness-gets) table above for per-harness delivery. The key distinction: Claude Code uses **native deferred loading** — the 2,635 skill names cost ~7,500 tokens in the index, while each skill's full content (2,000+ tokens) loads only when that skill is invoked.
+All five harnesses receive the same 2,652-skill pool. Codex and Pi symlink to source repos for skills already in valid format; the symlink-vs-copy mix differs per harness based on which sources the install chose to symlink. Codex's 64-char directory-name limit is **defensive only** — no skill in the current corpus exceeds it, so no truncation occurs. See the [What Each Harness Gets](#what-each-harness-gets) table above for per-harness delivery. The key distinction: Claude Code uses **native deferred loading** — the 2,652 skill names cost ~7,500 tokens in the index, while each skill's full content (2,000+ tokens) loads only when that skill is invoked.
 
 ### lean-skills.txt (for `claude` CLI + ollama sessions)
 
@@ -878,7 +879,7 @@ Skills are symlinked (not copied), so they load on-demand just like in Claude Co
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | 3,248 files (2,635 unique) via native `/skills` + lean cache (top 50, ~3K tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
+| Skills injection | 3,265 files (2,652 unique) via native `/skills` + lean cache (top 50, ~3K tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
@@ -942,6 +943,7 @@ The MCP server (`beads-mcp`) makes beads available in any harness that loads MCP
 - `~/.claude-deepmind-skills/` — Google DeepMind science-skills (37 skills)
 - `~/.claude-sciagent-skills/` — SciAgent-Skills (197 skills, 12 categories)
 - `~/.claude-bionemo-skills/` — NVIDIA BioNeMo GPU-accelerated bio skills (35 skills)
+- `~/.claude-nature-paper-skills/` — Nature-Paper manuscript-workflow skills (18 skills)
 - `~/.claude-life-sciences/` — Anthropic life-sciences skills (6 skills)
 - `~/.claude-bipartite/` — Bipartite research workflow CLI + skills (37 skills, 16 agents; `bip` binary at `~/go/bin/bip`)
 - [GoekeLab/awesome-genomic-skills](https://github.com/GoekeLab/awesome-genomic-skills) — Curated list of genomic/bioinformatics agent skills + MCP servers

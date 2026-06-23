@@ -2,7 +2,7 @@
 
 Overview of all skills available through ai-skillweave, organized by source and category.
 
-**Total: 2,635 unique skills** delivered to all 5 harnesses — `update-ecc.sh` merges every source repo into 2,635 unique skill directories. Per-harness on-disk SKILL.md file counts run higher (Claude 3,248 · OpenClaw 3,293 · Codex 3,301 · Pi 3,328 · Copilot 3,248) because each harness also carries its own native skills, the learned-skills cache, and source-repo duplicates that the unique count collapses. Each source's **on-disk** size and its **net-new** (deduplicated) contribution to the 2,635:
+**Total: 2,652 unique skills** delivered to all 5 harnesses — `update-ecc.sh` merges every source repo into 2,652 unique skill directories. Per-harness on-disk SKILL.md file counts run higher (Claude 3,265 · OpenClaw 3,310 · Codex 3,318 · Pi 3,345 · Copilot 3,265) because each harness also carries its own native skills, the learned-skills cache, and source-repo duplicates that the unique count collapses. Each source's **on-disk** size and its **net-new** (deduplicated) contribution to the 2,652:
 
 | Source | On-disk | Net-new | Provenance |
 |---|---:|---:|---|
@@ -17,21 +17,22 @@ Overview of all skills available through ai-skillweave, organized by source and 
 | DeepMind | 37 | 37 | [google-deepmind/science-skills](https://github.com/google-deepmind/science-skills) → `~/.claude-deepmind-skills/skills/` |
 | Bipartite | 37 | 37 | [matsen/bipartite](https://github.com/matsen/bipartite) → `~/.claude-bipartite/skills/` (+ 16 subagent definitions) |
 | BioNeMo | 35 | 33 | [NVIDIA-BioNeMo/bionemo-agent-toolkit](https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit) → `~/.claude-bionemo-skills/` |
+| Nature-Paper | 18 | 17 | [Boom5426/Nature-Paper-Skills](https://github.com/Boom5426/Nature-Paper-Skills) → `~/.claude-nature-paper-skills/skills/` (MIT) |
 | Anthropic | 17 | 13 | [anthropics/skills](https://github.com/anthropics/skills) → `~/.claude-curated-skills/anthropic-official/skills/` |
 | life-sciences | 6 | 5 | [anthropics/life-sciences](https://github.com/anthropics/life-sciences) → `~/.claude-life-sciences/` |
 | OpenAI Codex curated | 44 | 0 | [openai/skills](https://github.com/openai/skills) → `~/.claude-curated-skills/openai-codex/skills/` (under `.curated/` + `.system/`; overlap ECC and ship natively with the Codex harness, so 0 net-new) |
 | claude_extras | — | 105 | Imported into `~/.claude/skills/` with no live upstream repo; collected by the `claude_extras` supplemental scan in `update-ecc.sh` |
 | Personal learned | grows | — | `learned/events/`, distilled via `extract-conversation-skills.py`; 33 archived in `learned/.archive/` |
 
-**Per-harness file counts** (on-disk SKILL.md resolved through symlinks — higher than the 2,635 unique total because each harness also carries native skills, the learned cache, and duplicates):
+**Per-harness file counts** (on-disk SKILL.md resolved through symlinks — higher than the 2,652 unique total because each harness also carries native skills, the learned cache, and duplicates):
 
-- **Claude: 3,248** — full library, native deferred loading via `/skills`.
-- **OpenClaw: 3,293** — real file copies.
-- **Codex: 3,301** — real copies + symlinks to source repos + Codex-native skills. 0 broken symlinks.
-- **Pi: 3,328** — 61 curated real copies + symlinks to source repos. 0 broken symlinks.
-- **Copilot: 3,248** — symlinked to `~/.claude/skills/`, so it mirrors Claude.
+- **Claude: 3,265** — full library, native deferred loading via `/skills`.
+- **OpenClaw: 3,310** — real file copies.
+- **Codex: 3,318** — real copies + symlinks to source repos + Codex-native skills. 0 broken symlinks.
+- **Pi: 3,345** — 61 curated real copies + symlinks to source repos. 0 broken symlinks.
+- **Copilot: 3,265** — symlinked to `~/.claude/skills/`, so it mirrors Claude.
 
-What's structural: **2,635 unique skills** flow to all 5 harnesses, drawn from 14 source repos — OpenClaw-Medical, operon, bioSkills, ECC, SciAgent, ToolUniverse, K-Dense, ClawBio, DeepMind, Bipartite, BioNeMo, Anthropic, life-sciences, and OpenAI Codex curated — plus 105 imported `claude_extras` and the personal learned skills. See the README's "What Each Harness Gets" table for per-harness delivery details.
+What's structural: **2,652 unique skills** flow to all 5 harnesses, drawn from 15 source repos — OpenClaw-Medical, operon, bioSkills, ECC, SciAgent, ToolUniverse, K-Dense, ClawBio, DeepMind, Bipartite, BioNeMo, Nature-Paper, Anthropic, life-sciences, and OpenAI Codex curated — plus 105 imported `claude_extras` and the personal learned skills. See the README's "What Each Harness Gets" table for per-harness delivery details.
 
 ---
 
@@ -318,6 +319,17 @@ From [FreedomIntelligence/OpenClaw-Medical-Skills](https://github.com/FreedomInt
 ## operon — Swarup Lab workflows — 556 protocols
 
 From [swaruplab/operon](https://github.com/swaruplab/operon) at `~/.claude-operon-skills/protocols/`. Single-cell and multi-omics analysis protocols (RNA-seq, scRNA-seq, ATAC-seq, ChIP-seq, WGS/WES, spatial, proteomics, GWAS). 556 SKILL.md on disk; 389 net-new after overlap with bioSkills/ClawBio.
+
+## Nature-Paper-Skills — 18 skills
+
+From [Boom5426/Nature-Paper-Skills](https://github.com/Boom5426/Nature-Paper-Skills) at `~/.claude-nature-paper-skills/` (MIT). Agent skills for Nature-style manuscript work — drafting, revision, and submission:
+
+- **Core**: `paper-workflow`, `paper-bootstrap`, `scientific-writing`, `manuscript-optimizer`, `results-section-revision`, `figure-planner`, `citation-verifier`, `data-availability`, `submission-audit`, `rebuttal-response`
+- **Venue**: `nature-portfolio-playbook`
+- **Research & review**: `academic-researcher`, `paper-analyzer`, `results-analysis`, `paper-reviewer`
+- **Optional**: `conference-paper-writing`, `reference-audit-guide`, `academic-presentations`
+
+18 SKILL.md on disk; 17 net-new (`scientific-writing` overlaps K-Dense).
 
 ## Anthropic life-sciences — 6 skills
 

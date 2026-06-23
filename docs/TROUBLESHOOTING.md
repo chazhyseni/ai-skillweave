@@ -31,7 +31,7 @@ Copilot CLI bridges the cross-harness skill pool via `scripts/setup-copilot-skil
 If no skills appear in Copilot:
 
 1. **Check the bridge is installed:** `scripts/setup-copilot-skills.sh --check` — all three checks should pass.
-2. **Verify skills are installed:** `find -L ~/.claude/skills -name SKILL.md | wc -l` (3,000+ on a full install; the library ships 2,635 unique skills).
+2. **Verify skills are installed:** `find -L ~/.claude/skills -name SKILL.md | wc -l` (3,000+ on a full install; the library ships 2,652 unique skills).
 3. **Re-run the skills install:** `./install.sh --only skills` then re-run `scripts/setup-copilot-skills.sh`.
 4. **Reload your shell** so the env-var export takes effect: `source ~/.bashrc` (or `~/.zshrc`).
 5. **Restart Copilot** so it re-discovers skills on launch.

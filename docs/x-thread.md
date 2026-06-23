@@ -3,7 +3,7 @@
 ## Post 1 (Main)
 Most AI agent setups are stateless by default. Without configuration, they don't retain your corrections, domain expertise, or custom conventions across sessions.
 
-ai-skillweave changes that: one install loads **2,635 skills** + MCP servers into Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Structured expertise, not guesswork.
+ai-skillweave changes that: one install loads **2,652 skills** + MCP servers into Claude Code, Codex, OpenClaw, Pi, and Copilot CLI. Structured expertise, not guesswork.
 
 And it learns from your corrections automatically.
 
@@ -53,6 +53,6 @@ cd ai-skillweave
 ./install.sh
 ```
 
-One command. Five harnesses. **2,635 skills**. MCP servers included. Zero config drift.
+One command. Five harnesses. **2,652 skills**. MCP servers included. Zero config drift.
 
 #AI #ML #DevTools #OpenSource
