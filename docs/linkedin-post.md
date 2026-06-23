@@ -4,7 +4,7 @@ Most AI agent setups are stateless by default. Without configuration, they don't
 
 ai-skillweave fixes that.
 
-One install loads **2,652 skills** — that's >2,600 real Agent Skills from 14 open-source libraries, synced natively to Claude Code, Codex, OpenClaw, Pi, Copilot, and Hermes. Not just prompts, but structured SKILL.md files with conditions, strategies, anti-patterns, and examples. The agent knows your conventions before you type.
+One install loads **2,652 structured skills** from 14 open-source libraries into Claude Code, Codex, OpenClaw, Pi, Copilot, and Hermes. Your agent walks in already knowing the conventions.
 
 MCP servers extend what it can do: persistent memory, real-time docs lookup, browser automation, codebase context maps, sequential reasoning, token optimization, Google Docs integration, and a bioinformatics knowledge graph.
 
