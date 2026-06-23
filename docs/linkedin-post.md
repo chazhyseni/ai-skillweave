@@ -2,9 +2,7 @@
 
 Most AI agent setups are stateless by default. Without configuration, they don't retain your corrections, domain expertise, or custom conventions across sessions.
 
-ai-skillweave fixes that.
-
-One install loads **2,652 structured skills** from 14 open-source libraries into Claude Code, Codex, OpenClaw, Pi, Copilot, and Hermes. Your agent walks in already knowing the conventions.
+ai-skillweave started with ~450 skills for Claude Code. It now ships **>2,500 unique skills** from 14 open-source libraries — synced natively to Claude Code, Codex, OpenClaw, Pi, Copilot, and Hermes.
 
 MCP servers extend what it can do: persistent memory, real-time docs lookup, browser automation, codebase context maps, sequential reasoning, token optimization, Google Docs integration, and a bioinformatics knowledge graph.
 
