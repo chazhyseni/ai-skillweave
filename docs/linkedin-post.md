@@ -1,6 +1,6 @@
 # LinkedIn Post: ai-skillweave
 
-Most AI agent setups are stateless by default. Without configuration, they don't retain your corrections, domain expertise, or custom conventions across sessions.
+Most AI agent setups are stateless by default for **corrections**. Static conventions can be persisted manually (CLAUDE.md, AGENTS.md, copilot-instructions.md), but agents don't learn from your feedback across sessions. "No, use absolute paths" today doesn't change behavior tomorrow.
 
 ai-skillweave started with ~450 skills for Claude Code. It now ships **>2,500 unique skills** from 14 open-source libraries — synced natively to Claude Code, Codex, OpenClaw, Pi, Copilot, and Hermes.
 
