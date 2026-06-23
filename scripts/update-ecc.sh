@@ -104,6 +104,42 @@ fi
 
 [[ "$*" == *"--check"* ]] && exit 0
 
+# =============================================================================
+# Step 1b: Pull every other skill source repo to latest (ECC handled above),
+# so a sync is COMPLETE — newest skills from every upstream, not just ECC.
+# bioSkills lives in-place under ~/.claude/skills and is intentionally NOT
+# git-pulled here (that dir also holds synced + learned skills).
+# =============================================================================
+log "Updating skill source repos..."
+SOURCE_REPOS=(
+    "$HOME/.claude-medical-skills"
+    "$HOME/.claude-operon-skills"
+    "$HOME/.claude-tooluniverse"
+    "$HOME/.claude-sciagent-skills"
+    "$HOME/.claude-deepmind-skills"
+    "$HOME/.claude-bionemo-skills"
+    "$HOME/.claude-clawbio-skills"
+    "$HOME/.claude-scientific-skills"
+    "$HOME/.claude-bipartite"
+    "$HOME/.claude-life-sciences"
+    "$HOME/.claude-curated-skills"
+)
+SRC_UPDATED=0
+for repo in "${SOURCE_REPOS[@]}"; do
+    [ -d "$repo/.git" ] || continue
+    before=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
+    if git -C "$repo" pull --ff-only --quiet 2>/dev/null; then
+        after=$(git -C "$repo" rev-parse HEAD 2>/dev/null)
+        if [ "$before" != "$after" ]; then
+            success "Updated $(basename "$repo"): $(git -C "$repo" log -1 --format='%h %s' 2>/dev/null)"
+            SRC_UPDATED=$((SRC_UPDATED + 1))
+        fi
+    else
+        warn "$(basename "$repo"): could not fast-forward (local changes or diverged) — left as-is"
+    fi
+done
+[ "$SRC_UPDATED" -eq 0 ] && success "All skill source repos already up to date"
+
 CURATED_DIR="$HOME/.claude-curated-skills"
 
 # =============================================================================
@@ -268,7 +304,7 @@ fi
 log "Re-syncing skills to harnesses (with YAML sanitization)..."
 
 python3 - << 'PYEOF'
-import os, re, shutil, glob
+import os, re, shutil, glob, json
 
 home = os.path.expanduser("~")
 ecc_dir = os.path.join(home, ".claude-everything-claude-code", "skills")
@@ -382,6 +418,25 @@ deepmind_dir = os.path.join(home, ".claude-deepmind-skills", "skills")
 # biology, drug discovery, systems biology, biostatistics, scientific writing.
 # Organized as categories/skill/SKILL.md (depth-2, like bioSkills).
 sciagent_dir = os.path.join(home, ".claude-sciagent-skills", "skills")
+# ToolUniverse (mims-harvard) — 150 skills (in skills/) for drug discovery,
+# precision oncology, and rare-disease diagnosis, wrapping 1,000+ ML models.
+tooluniverse_dir = os.path.join(home, ".claude-tooluniverse", "skills")
+# OpenClaw-Medical-Skills (FreedomIntelligence) — 896 skills (in skills/)
+# spanning clinical workflows, genomics, drug discovery, and regulatory.
+medical_dir = os.path.join(home, ".claude-medical-skills", "skills")
+# operon (swaruplab/UC Irvine) — 556 bioinformatics protocols (in protocols/):
+# RNA-seq, scRNA-seq, ATAC-seq, ChIP-seq, WGS/WES, spatial, proteomics, GWAS.
+operon_dir = os.path.join(home, ".claude-operon-skills", "protocols")
+# Anthropic life-sciences — 6 skills (single-cell-rna-qc, nextflow-development,
+# clinical-trial-protocol-skill, scientific-problem-selection).
+lifesci_dir = os.path.join(home, ".claude-life-sciences")
+# NVIDIA BioNeMo agent toolkit (NVIDIA-BioNeMo/bionemo-agent-toolkit) — 35
+# GPU-accelerated life-science skills wrapping NVIDIA NIM microservices and
+# open models: Boltz-2, OpenFold2/3, RFdiffusion, ProteinMPNN, DiffDock,
+# MolMIM, GenMol, Evo2, MSA-Search, Parabricks, plus protein-binder design
+# and drug-discovery workflows. Skills span the whole repo (nim-skills/,
+# open-models-skills/, library-skills/, workflows/, plugins/).
+bionemo_dir = os.path.join(home, ".claude-bionemo-skills")
 
 # Collect all SKILL.md source dirs across ECC + Anthropic official + Codex curated + K-Dense
 def collect_skill_dirs(base_dir, max_depth=None):
@@ -438,12 +493,22 @@ bioskills = collect_bioskills(bioskills_dir)
 bipartite_skills = collect_skill_dirs(bipartite_dir)
 deepmind_skills = collect_skill_dirs(deepmind_dir)
 sciagent_skills = collect_skill_dirs(sciagent_dir)
+tooluniverse_skills = collect_skill_dirs(tooluniverse_dir)
+medical_skills = collect_skill_dirs(medical_dir)
+operon_skills = collect_skill_dirs(operon_dir)
+lifesci_skills = collect_skill_dirs(lifesci_dir)
+bionemo_skills = collect_skill_dirs(bionemo_dir)
 
 # Merge all sources (ECC has highest priority on name conflicts)
 all_skills = {}
 all_skills.update(codex_curated_skills)   # lowest priority
 all_skills.update(bioskills)              # bio skills (before clawbio/science/ecc)
 all_skills.update(sciagent_skills)       # SciAgent (same level as bioSkills)
+all_skills.update(operon_skills)          # operon bioinformatics protocols
+all_skills.update(medical_skills)         # medical/clinical skills
+all_skills.update(tooluniverse_skills)    # ToolUniverse drug discovery
+all_skills.update(lifesci_skills)         # Anthropic life-sciences
+all_skills.update(bionemo_skills)         # NVIDIA BioNeMo GPU-accelerated bio
 all_skills.update(deepmind_skills)        # DeepMind science skills
 all_skills.update(anthropic_skills)       # medium-low priority
 all_skills.update(clawbio_skills)         # medium priority
@@ -476,6 +541,83 @@ if os.path.isdir(claude_skills_dir):
             continue
         claude_extras[skill_name] = os.path.dirname(skill_md_path)
 all_skills.update(claude_extras)            # supplemental (lowest priority)
+
+# =============================================================================
+# Prune: make every harness mirror the canonical set EXACTLY. We remove only
+# skills WE installed — tracked in a manifest of the previous run's set, plus
+# our own symlinks that resolve into an ai-skillweave source root — so each
+# harness's NATIVE skills (Codex/Pi built-ins, etc.) are never touched. Skills
+# deleted upstream, or belonging to a source we dropped, are removed here
+# instead of lingering as orphans.
+# =============================================================================
+_claude_skills = os.path.join(home, ".claude", "skills")
+_harness_dirs = [d for d in (_claude_skills, openclaw_ws, pi_skills, codex_skills) if os.path.isdir(d)]
+_manifest_path = os.path.join(home, ".claude", "skills-cache", "sync-manifest.json")
+_prev_names = set()
+try:
+    with open(_manifest_path) as _mf:
+        _prev_names = set(json.load(_mf).get("names", []))
+except (OSError, ValueError):
+    _prev_names = set()
+_current_names = set(all_skills)
+_source_roots = [os.path.realpath(os.path.join(home, d)) for d in (
+    ".claude-everything-claude-code", ".claude-medical-skills", ".claude-operon-skills",
+    ".claude-tooluniverse", ".claude-sciagent-skills", ".claude-deepmind-skills",
+    ".claude-bionemo-skills", ".claude-clawbio-skills", ".claude-scientific-skills",
+    ".claude-bipartite", ".claude-life-sciences", ".claude-curated-skills",
+    os.path.join(".claude", "skills"),
+)]
+
+def _is_ours(path):
+    try:
+        rp = os.path.realpath(path)
+    except OSError:
+        return False
+    return any(rp == r or rp.startswith(r + os.sep) for r in _source_roots)
+
+def _remove_entry(path):
+    try:
+        if os.path.islink(path) or os.path.isfile(path):
+            os.remove(path)
+        else:
+            shutil.rmtree(path)
+        return True
+    except OSError:
+        return False
+
+_pruned = 0
+for _hdir in _harness_dirs:
+    _is_codex = (_hdir == codex_skills)
+    for _entry in os.listdir(_hdir):
+        if _entry == "learned" or _entry.startswith("."):
+            continue
+        # A canonical skill name maps to a (possibly 64-char-truncated) codex dir.
+        if _is_codex:
+            _keep = any(_entry == n[:64].rstrip("-") for n in _current_names)
+        else:
+            _keep = _entry in _current_names
+        if _keep:
+            continue
+        _path = os.path.join(_hdir, _entry)
+        # Remove only if this is something WE installed:
+        #   (a) it was in our previous-run manifest, or
+        #   (b) it is a symlink resolving into one of our source roots, or
+        #   (c) it lives in the fully-managed ~/.claude/skills as a depth-1 dir
+        #       with its own SKILL.md (bioSkills category dirs have none → kept).
+        _ours = (_entry in _prev_names) or (os.path.islink(_path) and _is_ours(_path))
+        if not _ours and _hdir == _claude_skills and not os.path.islink(_path):
+            _ours = os.path.exists(os.path.join(_path, "SKILL.md"))
+        if _ours and _remove_entry(_path):
+            _pruned += 1
+
+try:
+    os.makedirs(os.path.dirname(_manifest_path), exist_ok=True)
+    with open(_manifest_path, "w") as _mf:
+        json.dump({"names": sorted(_current_names)}, _mf)
+except OSError:
+    pass
+if _pruned:
+    print(f"\033[0;32m[OK]\033[0m Pruned {_pruned} orphaned skill(s) no longer in the source set")
 
 stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}}
 
@@ -687,7 +829,7 @@ if os.path.isdir(os.path.join(home, ".claude")):
     print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
 total = len(all_skills)
-print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) + DeepMind({len(deepmind_skills)}) + SciAgent({len(sciagent_skills)}) = {total} unique skill dirs")
+print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) + DeepMind({len(deepmind_skills)}) + SciAgent({len(sciagent_skills)}) + ToolUniverse({len(tooluniverse_skills)}) + Medical({len(medical_skills)}) + operon({len(operon_skills)}) + life-sciences({len(lifesci_skills)}) + BioNeMo({len(bionemo_skills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")
