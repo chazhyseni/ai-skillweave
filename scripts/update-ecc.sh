@@ -663,16 +663,19 @@ success "ECC update complete! Restart Claude Code and OpenClaw to load new skill
 # Step 4: Run learning pipeline (extract + sync learned skills)
 # =============================================================================
 
-# Prevent duplicate pipeline runs within 5 minutes (e.g. install.sh calling
-# update-ecc.sh twice, or overlapping cron jobs).
+# Prevent duplicate pipeline runs within 3 days (e.g. repeated installs,
+# overlapping cron jobs). The LLM distillation is expensive (3-5 min on
+# a 23GB thinking model) and re-running it within a few days produces
+# the same skills from the same conversation histories.
 LOCK_FILE="/tmp/ai-skillweave-learn.lock"
-LOCK_MAX_AGE=60  # 1 minute — prevents duplicate runs within a single install.sh execution
+LOCK_MAX_AGE=$((3 * 24 * 60 * 60))  # 3 days — prevents redundant LLM runs
 
 should_run_learning=true
 if [ -f "$LOCK_FILE" ]; then
     lock_age=$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || stat -f %m "$LOCK_FILE" 2>/dev/null || echo 0)))
     if [ "$lock_age" -lt "$LOCK_MAX_AGE" ]; then
-        log "Learning pipeline already ran ${lock_age}s ago (within ${LOCK_MAX_AGE}s window) — skipping"
+        lock_age_h=$((lock_age / 3600))
+        log "Learning pipeline already ran ${lock_age_h}h ago (within 3-day window) — skipping"
         should_run_learning=false
     fi
 fi
@@ -681,8 +684,10 @@ if $should_run_learning; then
     touch "$LOCK_FILE"
     SYNC_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/sync-learned-skills.sh"
     if [ -f "$SYNC_SCRIPT" ]; then
+        SYNC_ARGS=""
+        [[ "$*" == *"--no-llm"* ]] && SYNC_ARGS="$SYNC_ARGS --no-llm"
         log "Running learning pipeline..."
-        bash "$SYNC_SCRIPT" && success "Learned skills synced" || warn "Learning pipeline had issues (non-fatal)"
+        bash "$SYNC_SCRIPT" $SYNC_ARGS && success "Learned skills synced" || warn "Learning pipeline had issues (non-fatal)"
     else
         warn "sync-learned-skills.sh not found — skipping learned skill extraction"
     fi

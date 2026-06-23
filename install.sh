@@ -75,6 +75,7 @@ WITH_SCIENCE=true
 WITH_CURATED=true
 WITH_BIO=true
 WITH_LEARN=true
+WITH_LLM=true
 ONLY_TARGET=""
 
 while [[ $# -gt 0 ]]; do
@@ -89,6 +90,7 @@ while [[ $# -gt 0 ]]; do
         --without-bio)      WITH_BIO=false; shift ;;
         --learn)            WITH_LEARN=true; shift ;;
         --no-learn)         WITH_LEARN=false; shift ;;
+        --no-llm)           WITH_LLM=false; shift ;;
         --only)             ONLY_TARGET="$2"; shift 2 ;;
         --uninstall)
             "$REPO_DIR/safe-install.sh" --uninstall
@@ -99,7 +101,7 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         --help|-h)
-            echo "Usage: ./install.sh [--model MODEL] [--skip-skills] [--with-science] [--without-science] [--with-bio] [--without-bio] [--with-curated] [--without-curated] [--learn] [--no-learn] [--only TARGET] [--uninstall] [--verify]"
+            echo "Usage: ./install.sh [--model MODEL] [--skip-skills] [--with-science] [--without-science] [--with-bio] [--without-bio] [--with-curated] [--without-curated] [--learn] [--no-learn] [--no-llm] [--only TARGET] [--uninstall] [--verify]"
             echo ""
             echo "  --with-science     Include K-Dense scientific skills (default: on)"
             echo "  --without-science  Skip K-Dense scientific skills"
@@ -108,7 +110,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --with-curated     Include OpenAI Codex curated skills (default: off)"
             echo "  --without-curated  Skip OpenAI Codex curated skills (default)"
             echo "  --learn            Run learn pipeline after skill install (default: on)"
-            echo "  --no-learn         Skip learn pipeline"
+            echo "  --no-learn         Skip learn pipeline entirely"
+            echo "  --no-llm           Run learn pipeline but skip LLM distillation (regex-only extraction; faster, lower quality)"
             echo "  --only TARGET      Run only one component (skills|ollama|claude|openclaw|codex|pi|copilot|beads)"
             exit 0
             ;;
@@ -417,7 +420,9 @@ if ! $SKIP_SKILLS && should_run "skills"; then
     # Rebuild cache with full skill counts (safe-install.sh caps Codex at 100).
     # update-ecc.sh also restores ECC working tree to actual HEAD.
     log "Rebuilding skills cache with full counts..."
-    bash "$REPO_DIR/scripts/update-ecc.sh" --force || true
+    UPDATE_ECC_ARGS="--force"
+    $WITH_LLM || UPDATE_ECC_ARGS="$UPDATE_ECC_ARGS --no-llm"
+    bash "$REPO_DIR/scripts/update-ecc.sh" $UPDATE_ECC_ARGS || true
     success "Skills cache rebuilt (all sources, no caps)"
 else
     log "Skipping skills layer"
