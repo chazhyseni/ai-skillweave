@@ -205,14 +205,21 @@ CACHE_SIZE=$(wc -c < "$COMBINED_FILE" | tr -d ' ')
 success "Cache rebuilt: $CACHE_SIZE bytes → $COMBINED_FILE"
 
 # Rebuild lean cache: name + operating principle only per skill (~20 tokens/skill)
-# This is what _claude_with_skills injects. Full content would be ~250 tokens/skill.
+# Cap at top 50 learned skills (by confidence) to keep the injection budget
+# reasonable. Without a cap, 599 learned skills = 149K bytes = ~37K tokens,
+# which is too much to inject into every session. The cap keeps it under
+# ~5K tokens while still surfacing the highest-value corrections.
 LEAN_FILE="$SKILLS_CACHE_DIR/lean-skills.txt"
+LEAN_CAP=50
 if ls "$HOME/.claude/skills/learned"/*.md >/dev/null 2>&1; then
-    python3 - "$HOME/.claude/skills/learned" "$LEAN_FILE" << 'PYEOF'
+    python3 - "$HOME/.claude/skills/learned" "$LEAN_FILE" "$LEAN_CAP" << 'PYEOF'
 import sys, re, pathlib
 skills_dir = pathlib.Path(sys.argv[1])
 out_file = pathlib.Path(sys.argv[2])
-lines = ["# Learned Skills (name + operating principle only)\n"]
+cap = int(sys.argv[3])
+
+# Collect all skills with their confidence for ranking
+skills = []
 for f in sorted(skills_dir.glob("*.md")):
     if f.name.startswith(".") or f.name in ("SKILL.md",):
         continue
@@ -220,15 +227,34 @@ for f in sorted(skills_dir.glob("*.md")):
     name = re.search(r'^name:\s*(.+)$', text, re.M)
     desc = re.search(r'^description:\s*(.+)$', text, re.M)
     principle = re.search(r'^\d+\.\s+(.+)$', text, re.M)
+    confidence = re.search(r'\*\*Confidence:\*\*\s*([\d.]+)', text, re.M)
+    freq = re.search(r'\*\*Unique sessions:\*\*\s*(\d+)', text, re.M)
     if name and desc:
-        lines.append(f"- **{name.group(1).strip()}**: {desc.group(1).strip()}")
-        if principle:
-            lines.append(f"  → {principle.group(1).strip()}")
-        lines.append("")
+        conf_val = float(confidence.group(1)) if confidence else 0.0
+        freq_val = int(freq.group(1)) if freq else 0
+        skills.append((conf_val, freq_val, name.group(1).strip(), desc.group(1).strip(),
+                       principle.group(1).strip() if principle else ""))
+
+# Sort by confidence desc, then frequency desc
+skills.sort(key=lambda s: (s[0], s[1]), reverse=True)
+
+# Cap to top N
+capped = skills[:cap]
+
+lines = ["# Learned Skills (name + operating principle only, top %d by confidence)\n" % len(capped)]
+for _, _, name, desc, principle in capped:
+    lines.append(f"- **{name}**: {desc}")
+    if principle:
+        lines.append(f"  → {principle}")
+    lines.append("")
+
+if len(skills) > cap:
+    lines.append(f"# ({len(skills)} total learned skills; showing top {cap} by confidence)")
+
 out_file.write_text("\n".join(lines))
 PYEOF
     LEAN_SIZE=$(wc -c < "$LEAN_FILE" | tr -d ' ')
-    success "Lean cache: $LEAN_SIZE bytes (~$((LEAN_SIZE/4)) tokens, name+principle only per skill)"
+    success "Lean cache: $LEAN_SIZE bytes (~$((LEAN_SIZE/4)) tokens, top $LEAN_CAP of $(ls "$HOME/.claude/skills/learned"/*.md 2>/dev/null | grep -cv '/.usage') learned skills)"
 else
     > "$LEAN_FILE"
     warn "No learned skills found — lean cache is empty"
@@ -675,7 +701,10 @@ if [ -f "$LOCK_FILE" ]; then
     lock_age=$(($(date +%s) - $(stat -c %Y "$LOCK_FILE" 2>/dev/null || stat -f %m "$LOCK_FILE" 2>/dev/null || echo 0)))
     if [ "$lock_age" -lt "$LOCK_MAX_AGE" ]; then
         lock_age_h=$((lock_age / 3600))
-        log "Learning pipeline already ran ${lock_age_h}h ago (within 3-day window) — skipping"
+        # Show learned skill count so the user knows what's already there
+        LEARNED_DIR="$HOME/.claude/skills/learned"
+        LEARNED_COUNT=$(ls "$LEARNED_DIR"/*.md 2>/dev/null | grep -v '/.usage' | wc -l | tr -d ' ')
+        log "Learning pipeline already ran ${lock_age_h}h ago (within 3-day window) — skipping ($LEARNED_COUNT learned skills already present)"
         should_run_learning=false
     fi
 fi

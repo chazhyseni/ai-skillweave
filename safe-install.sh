@@ -1095,7 +1095,17 @@ show_usage() {
         # Count skills in category subdirs (depth-3 = category/skill/SKILL.md)
         BIOSKILLS_COUNT=$(find "$CLAUDE_DIR/skills" -mindepth 3 -maxdepth 3 -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
     fi
-    TOTAL_COUNT=$((ECC_COUNT + ANTHROPIC_COUNT + CODEX_COUNT + SCIENCE_COUNT + BIO_COUNT + BIOSKILLS_COUNT))
+    # Count Bipartite skills (if installed)
+BIPARTITE_COUNT=0
+if [ -d "$HOME/.claude-bipartite/skills" ]; then
+    BIPARTITE_COUNT=$(find "$HOME/.claude-bipartite/skills" -maxdepth 2 -name 'SKILL.md' 2>/dev/null | wc -l | tr -d ' ')
+fi
+# Count learned skills (if any exist)
+LEARNED_COUNT=0
+if [ -d "$HOME/.claude/skills/learned" ]; then
+    LEARNED_COUNT=$(ls "$HOME/.claude/skills/learned"/*.md 2>/dev/null | grep -v '/.usage' | wc -l | tr -d ' ')
+fi
+TOTAL_COUNT=$((ECC_COUNT + ANTHROPIC_COUNT + CODEX_COUNT + SCIENCE_COUNT + BIO_COUNT + BIOSKILLS_COUNT + BIPARTITE_COUNT + LEARNED_COUNT))
 
     # Determine which rc file to tell the user to source
     local reload_rc
@@ -1115,9 +1125,11 @@ Skills loaded:
   - ECC skills:              $ECC_COUNT
   - Anthropic skills:        $ANTHROPIC_COUNT
   - Codex skills:            $CODEX_COUNT
-  - Scientific skills:       $SCIENCE_COUNT (K-Dense Agent Skills)
+  - Scientific skills:       $SCIENCE_COUNT (K-Dense Agent Skills — upstream snapshot currently empty; 107 K-Dense-authored skills already in ~/.claude/skills/ via Hermes openclaw-imports)
   - Bioinformatics (ClawBio):$BIO_COUNT
   - Bioinformatics (bioSkills):$BIOSKILLS_COUNT (GPTomics/bioSkills)
+  - Bipartite:              $BIPARTITE_COUNT (research workflow skills)
+  - Learned:                $LEARNED_COUNT (auto-extracted from conversations)
   - Total:                   $TOTAL_COUNT
 
 Activate:  source $reload_rc   (or restart terminal)

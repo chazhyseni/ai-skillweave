@@ -167,7 +167,7 @@ ollama launch copilot     # Copilot CLI + MCP servers
 | **Ollama integrations** | Sets per-harness model mapping in `~/.ollama/config.json` (qwen3.6 default) |
 | **Shell wrappers** | Adds `_*_with_skills` functions + aliases in `~/.bashrc` and/or `~/.zshrc` |
 | **Claude Code skills** | Copies all skill sources (ECC, K-Dense, ClawBio, bioSkills, Anthropic, Codex) to `~/.claude/skills/` — visible via `/skills`, works with any launch method |
-| **Lean skills cache** | Personal learned skills at `~/.claude/skills-cache/lean-skills.txt` — name + one operating principle per skill (~51 tokens currently). Full library cache (`combined-skills.txt`, 4.9 MB / ~1.23M tokens) kept for reference but never injected — Claude's 200K window means the full library would overflow every session |
+| **Lean skills cache** | Top 50 learned skills by confidence at `~/.claude/skills-cache/lean-skills.txt` — name + one operating principle per skill (~5K tokens, capped at 50 to keep injection reasonable). Full library cache (`combined-skills.txt`, 4.9 MB / ~1.23M tokens) kept for reference but never injected — Claude's 200K window means the full library would overflow every session |
 | **bioSkills** | 550 bioinformatics skills (63 categories) from [GPTomics/bioSkills](https://github.com/GPTomics/bioSkills) cloned into `~/.claude/skills/` — available on-demand via the Skill tool, NOT injected into every session. Categories: variant-calling, single-cell, spatial-transcriptomics, phylogenetics, atac-seq, crispr-screens, workflows, and 56 more |
 | **Beads** | `bd` CLI + `beads-mcp` MCP server — cross-session work item tracking. `bd prime` gives AI-optimised project context at session start |
 | **Learning pipeline scripts** | Copies `sync-learned-skills.sh`, `extract-conversation-skills.py`, `safe-install.sh` to `~/.claude/scripts/` so `learn-sync`/`learn-stats`/`learn-prune` aliases work from any directory |
@@ -465,7 +465,7 @@ Harnesses differ in how skills are delivered and in the per-harness count (after
 
 | Harness | Skill count | Delivery |
 |---------|-------------|----------|
-| `claude` / `ollama launch claude` | **~1.8K** (1,249 immediate-subdir + 550 in 63 bioSkills categories + 33 archived in `learned/.archive/` + ~41 misc) | Native `~/.claude/skills/` — loaded on demand via `/skills`. Learned skills also injected via `lean-skills.txt` (~51 tokens) at launch. |
+| `claude` / `ollama launch claude` | **~1.8K** (1,249 immediate-subdir + 550 in 63 bioSkills categories + 33 archived in `learned/.archive/` + ~41 misc) | Native `~/.claude/skills/` — loaded on demand via `/skills`. Learned skills also injected via `lean-skills.txt` (top 50 by confidence, ~5K tokens) at launch. |
 | `ollama launch openclaw` | **~1,850** | Real file copies (no symlinks) in `~/.openclaw/workspace/skills/`. **Note:** OpenClaw also has a `skills.entries` section in `~/.openclaw/openclaw.json` for built-in harness-native skills (e.g. obsidian, himalaya, openhue, oracle). The ai-skillweave pipeline does **not** populate `entries` — it uses the workspace dir instead, because workspace skills are loaded automatically while registered entries are opt-in. |
 | `ollama launch codex` | **~1,860** (806 real SKILL.md copies + symlinks to source repos + 5 Codex-bundled in `.system/` + 37 Bipartite + K-Dense + misc) | YAML-sanitized copies + symlinks in `~/.codex/skills/`. Codex flattens the bioSkills depth-3 layout (`<category>/<skill>/SKILL.md`) to depth-1 (`<skill>/SKILL.md`). The install creates symlinks to skills in source repos (ECC, Anthropic, Codex curated, Bipartite, etc.) where the skill is already in the right format, and sanitized real copies where the YAML needs repair. All 107 K-Dense-authored skills flow to Codex via the `claude_extras` supplemental scan in `update-ecc.sh` (commit `46221f7`). Codex's 64-char directory-name limit is enforced by `update-ecc.sh`; the current corpus has 0 skills over 64 chars, so no truncation actually happens. The `name:` field in SKILL.md is **never** rewritten, so cross-harness equivalence is preserved. |
 | `ollama launch pi` | **~1,855** (61 curated real SKILL.md + symlinks to skills in source repos + 37 Bipartite + K-Dense + misc) | Symlinks in `~/.pi/agent/skills/`. Pi uses symlinks to the full corpus (unlike Codex which sometimes copies) so the effective skill surface is the union of all symlinks that resolve. The 61 curated real SKILL.md dirs are pi-specific (mostly Hermes corpus skills that have been hand-picked). All 107 K-Dense-authored skills flow to Pi via the `claude_extras` supplemental scan in `update-ecc.sh` (commit `46221f7`); broken-symlink replacement uses `os.path.lexists()` so the new symlinks always replace stale ones. Pi also auto-discovers `~/.agents/skills/` (Agent Skills spec standard path) if you create it. |
@@ -643,7 +643,7 @@ The key is **deferred loading**: skills are indexed (name only in system prompt,
 | Layer | What's in context | Token cost |
 |-------|------------------|------------|
 | **Skill index** (always) | ~1.7K skill names in the available-skills list | ~7,500 tokens, cached after first turn |
-| **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill | ~51 tokens (currently 205 bytes; grows as you add learned skills) |
+| **lean-skills.txt** (ollama/claude CLI only) | Name + one operating principle per learned skill (top 50 by confidence) | ~5K tokens (capped; without cap, 599 skills = ~37K tokens) |
 | **Skill content** (on demand) | Full SKILL.md loaded when you invoke a skill | 0 tokens unless used |
 
 ### Why this works
@@ -892,7 +892,7 @@ Skills are symlinked (not copied), so they load on-demand just like in Claude Co
 | Setup script | `install.sh` | `scripts/setup-claude-desktop.sh` |
 | Config file | `~/.claude.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | MCP servers | 9 auto (incl. beads) + manual API-key servers | 6 auto + API-key servers copied from CLI; skillgraph via Settings → Integrations |
-| Skills injection | ~1.7K files via native `/skills` + lean cache (~51 tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
+| Skills injection | ~1.8K files via native `/skills` + lean cache (top 50, ~5K tokens) | Symlinked from `~/.claude/skills/` into Desktop sessions — same on-demand loading |
 | Prompt caching | `tengu_system_prompt_global_cache: true` | Built-in Project caching |
 | Shell wrappers | `_claude_with_skills` in `.bashrc`/`.zshrc` | N/A (GUI app) |
 
