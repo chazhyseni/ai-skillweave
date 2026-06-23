@@ -578,7 +578,12 @@ all_skills.update(claude_extras)            # supplemental (lowest priority)
 # instead of lingering as orphans.
 # =============================================================================
 _claude_skills = os.path.join(home, ".claude", "skills")
-_harness_dirs = [d for d in (_claude_skills, openclaw_ws, pi_skills, codex_skills) if os.path.isdir(d)]
+_hermes_aiweave = os.path.join(home, ".hermes", "skills", "ai-skillweave")
+# Dirs ai-skillweave fully owns (only our skills live here) — safe to prune any
+# depth-1 skill dir no longer in the set. Codex/Pi mix in native skills, so they
+# are pruned only via the manifest + our-symlink rules.
+_managed_realcopy = {_claude_skills, openclaw_ws, _hermes_aiweave}
+_harness_dirs = [d for d in (_claude_skills, openclaw_ws, pi_skills, codex_skills, _hermes_aiweave) if os.path.isdir(d)]
 _manifest_path = os.path.join(home, ".claude", "skills-cache", "sync-manifest.json")
 _prev_names = set()
 try:
@@ -631,10 +636,12 @@ for _hdir in ([] if _no_prune else _harness_dirs):
         # Remove only if this is something WE installed:
         #   (a) it was in our previous-run manifest, or
         #   (b) it is a symlink resolving into one of our source roots, or
-        #   (c) it lives in the fully-managed ~/.claude/skills as a depth-1 dir
-        #       with its own SKILL.md (bioSkills category dirs have none → kept).
+        #   (c) it lives in a fully-managed real-copy dir (~/.claude/skills, the
+        #       OpenClaw workspace, or the Hermes ai-skillweave category) as a
+        #       depth-1 dir with its own SKILL.md (bioSkills category dirs have
+        #       none → kept).
         _ours = (_entry in _prev_names) or (os.path.islink(_path) and _is_ours(_path))
-        if not _ours and _hdir == _claude_skills and not os.path.islink(_path):
+        if not _ours and _hdir in _managed_realcopy and not os.path.islink(_path):
             _ours = os.path.exists(os.path.join(_path, "SKILL.md"))
         if _ours and _remove_entry(_path):
             _pruned += 1
@@ -648,7 +655,7 @@ except OSError:
 if _pruned:
     print(f"\033[0;32m[OK]\033[0m Pruned {_pruned} orphaned skill(s) no longer in the source set")
 
-stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}}
+stats = {"openclaw": {"updated": 0, "total": 0}, "pi": {"added": 0, "total": 0}, "codex": {"added": 0, "total": 0}, "hermes": {"updated": 0, "total": 0}}
 
 def sync_to_harness_real(skill_name, skill_dir, dest_dir):
     """Sync a skill dir to a harness dir (real file copies, sanitized)."""
@@ -857,11 +864,26 @@ if os.path.isdir(os.path.join(home, ".claude")):
         print(f"\033[0;32m[OK]\033[0m Claude Code: migrated {migrated} flat .md skills to directory format")
     print(f"\033[0;32m[OK]\033[0m Claude Code: {claude_total} skills ({claude_updated} updated)")
 
+# --- Hermes: real file copies into a dedicated ~/.hermes/skills/ai-skillweave/
+# category. Hermes auto-discovers <category>/<skill>/SKILL.md, so the whole pool
+# lands under one "ai-skillweave" toolset; native Hermes toolsets and the
+# openclaw-imports staging set are left untouched.
+hermes_skills_root = os.path.join(home, ".hermes", "skills")
+if os.path.isdir(hermes_skills_root):
+    hermes_aiweave = os.path.join(hermes_skills_root, "ai-skillweave")
+    os.makedirs(hermes_aiweave, exist_ok=True)
+    for skill_name, skill_dir in all_skills.items():
+        if sync_to_harness_real(skill_name, skill_dir, hermes_aiweave):
+            stats["hermes"]["updated"] += 1
+    stats["hermes"]["total"] = len([d for d in os.listdir(hermes_aiweave)
+                                    if os.path.isdir(os.path.join(hermes_aiweave, d))])
+
 total = len(all_skills)
 print(f"\033[0;32m[OK]\033[0m All skill sources: ECC({len(ecc_skills)}) + Anthropic({len(anthropic_skills)}) + Codex curated({len(codex_curated_skills)}) + K-Dense({len(science_skills)}) + ClawBio({len(clawbio_skills)}) + bioSkills({len(bioskills)}) + Bipartite({len(bipartite_skills)}) + DeepMind({len(deepmind_skills)}) + SciAgent({len(sciagent_skills)}) + ToolUniverse({len(tooluniverse_skills)}) + Medical({len(medical_skills)}) + operon({len(operon_skills)}) + life-sciences({len(lifesci_skills)}) + BioNeMo({len(bionemo_skills)}) + NaturePaper({len(naturepaper_skills)}) = {total} unique skill dirs")
 print(f"\033[0;32m[OK]\033[0m OpenClaw: {stats['openclaw']['total']} skills ({stats['openclaw']['updated']} updated)")
 print(f"\033[0;32m[OK]\033[0m Pi: {stats['pi']['total']} skills ({stats['pi']['added']} new)")
 print(f"\033[0;32m[OK]\033[0m Codex: {stats['codex']['total']} skills ({stats['codex']['added']} new — includes native Codex skills)")
+print(f"\033[0;32m[OK]\033[0m Hermes: {stats['hermes']['total']} ai-skillweave skills ({stats['hermes']['updated']} updated) in ~/.hermes/skills/ai-skillweave/")
 PYEOF
 
 echo ""
