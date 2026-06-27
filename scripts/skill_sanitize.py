@@ -495,6 +495,14 @@ def _extract_raw_fields(content: str) -> dict[str, str]:
         else:
             # Drop leading quote if present, trailing quote too.
             raw = raw.strip().strip("'\"")
+            # Unescape YAML double-quoted scalar escapes so we don't
+            # double-escape on the next sanitization pass. This is the
+            # fix for the "backslash doubling" infinite loop: each run
+            # of sanitize_skill_md → _synthesize_from_raw → _extract_raw_fields
+            # would extract the already-escaped string, then _escape_for
+            # _double_quoted_yaml would escape it again, doubling all
+            # backslashes. After N runs the description is all backslashes.
+            raw = raw.replace("\\\\", "\\").replace('\\"', '"')
         out["description"] = raw
     return out
 
@@ -511,9 +519,13 @@ def _synthesize_from_raw(content: str) -> str:
     """
     fields = _extract_raw_fields(content)
 
-    # Strip every `---\n...\n---\n` block — we'll write a clean replacement.
+    # Strip only the FIRST `---\n...\n---\n` block (the actual frontmatter).
+    # Using count=1 is critical: markdown bodies often contain `---` as
+    # horizontal rules, and the non-greedy `.*?` with re.DOTALL would match
+    # every `---...---` pair in the file, destroying body content.
     cleaned_body = re.sub(r"^---\s*\n.*?\n---\s*\n",
-                          "", content, flags=re.DOTALL | re.MULTILINE)
+                          "", content, count=1,
+                          flags=re.DOTALL | re.MULTILINE)
     # Also strip HTML comment wrappers (MAGE files wrap frontmatter in `<!-- -->`).
     cleaned_body = re.sub(r"<!--.*?-->", "", cleaned_body, flags=re.DOTALL)
     # Collapse runs of blank lines left behind.
