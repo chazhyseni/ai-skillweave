@@ -37,9 +37,14 @@
 #   scripts/setup-copilot-skills.sh --unlink   # remove symlink and restore
 #                                              # any pre-existing real dir
 # =============================================================================
-set -e
+set -eu
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The sweep heredoc may return non-zero when individual files fail to
+# sanitize (e.g. files with no frontmatter at all). We don't want that
+# to abort the entire script — the errors are reported in the output
+# and the user can decide whether to act on them.
+
+export REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COPILOT_DIR="$HOME/.copilot"
 COPILOT_SKILLS_LINK="$COPILOT_DIR/skills"
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
@@ -77,7 +82,7 @@ command -v copilot >/dev/null 2>&1 || warn "Copilot CLI not on PATH — install 
 # see. Each unique real path is sanitized at most once (deduped by
 # `os.path.realpath`).
 log "Sweeping Copilot-incompatible frontmatter across all reachable skills..."
-sweep_output=$(python3 - << 'PYEOF' 2>&1
+sweep_output=$(python3 - << 'PYEOF' 2>&1 || true
 import sys, os, glob
 sys.path.insert(0, os.environ["REPO_DIR"] + "/scripts")
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
@@ -111,11 +116,15 @@ for p in unique:
     if needs_sanitize_for_copilot(p):
         try:
             new = sanitize_skill_md(p)
-            orig_body = open(p).read().split("---", 2)[2]
-            new_body = new.split("---", 2)[2]
-            if abs(len(orig_body) - len(new_body)) > 4:
-                errors.append(f"body length changed by {len(new_body) - len(orig_body)} bytes: {p}")
-                continue
+            orig_parts = open(p).read().split("---", 2)
+            new_parts = new.split("---", 2)
+            # Both must have at least 3 parts (--- fm --- body) for the
+            # body-length check to make sense. Files with no frontmatter
+            # get a synthesized one, so new_parts always has 3.
+            if len(orig_parts) >= 3 and len(new_parts) >= 3:
+                if abs(len(orig_parts[2]) - len(new_parts[2])) > 4:
+                    errors.append(f"body length changed by {len(new_parts[2]) - len(orig_parts[2])} bytes: {p}")
+                    continue
             with open(p, "w") as f:
                 f.write(new)
             fixed += 1
