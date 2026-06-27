@@ -79,7 +79,7 @@ command -v copilot >/dev/null 2>&1 || warn "Copilot CLI not on PATH — install 
 log "Sweeping Copilot-incompatible frontmatter across all reachable skills..."
 sweep_output=$(python3 - << 'PYEOF' 2>&1
 import sys, os, glob
-sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
+sys.path.insert(0, os.environ["REPO_DIR"] + "/scripts")
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
 
 COPILOT_DIR = os.path.expanduser("~/.copilot/skills")
@@ -166,7 +166,7 @@ if [ "$ACTION" = "check" ]; then
     # individual symlinks inside ~/.claude/skills/).
     bad_count=$(REPO_DIR="$REPO_DIR" python3 - << 'PYEOF' 2>/dev/null
 import sys, os
-sys.path.insert(0, os.environ.get("REPO_DIR", "/home/chaz/scripts/ai-skillweave") + "/scripts")
+sys.path.insert(0, os.environ["REPO_DIR"] + "/scripts")
 from skill_sanitize import needs_sanitize_for_copilot
 
 COPILOT_DIR = os.path.expanduser("~/.copilot/skills")
