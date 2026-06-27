@@ -20,6 +20,8 @@
 # =============================================================================
 set -e
 
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 ECC_DIR="$HOME/.claude-everything-claude-code"
 SCIENCE_DIR="$HOME/.claude-scientific-skills"
 SKILLS_CACHE_DIR="$HOME/.claude/skills-cache"
@@ -323,13 +325,14 @@ fi
 # =============================================================================
 log "Re-syncing skills to harnesses (with YAML sanitization)..."
 
+export REPO_DIR
 python3 - << 'PYEOF'
 import os, sys, shutil, glob, json
 
 # Import the shared sanitizer so this script and setup-copilot-skills.sh
 # can't drift in their YAML-handling rules. Single source of truth lives
 # in scripts/skill_sanitize.py next to this file.
-sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
+sys.path.insert(0, os.environ.get("REPO_DIR", "") + "/scripts")
 from skill_sanitize import sanitize_skill_md, needs_sanitize, ALLOWED_FIELDS
 
 home = os.path.expanduser("~")

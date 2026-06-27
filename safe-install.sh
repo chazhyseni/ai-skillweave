@@ -811,7 +811,7 @@ link_native_skills() {
             # GitHub Copilot — see scripts/skill_sanitize.py for the rules.
             python3 -c "
 import sys
-sys.path.insert(0, '/home/chaz/scripts/ai-skillweave/scripts')
+sys.path.insert(0, '$REPO_DIR/scripts')
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
 p = '$dst'
 if needs_sanitize_for_copilot(p):
@@ -905,7 +905,7 @@ if needs_sanitize_for_copilot(p):
                 # with "missing or malformed YAML frontmatter"). See skill_sanitize.py.
                 python3 -c "
 import sys
-sys.path.insert(0, '/home/chaz/scripts/ai-skillweave/scripts')
+sys.path.insert(0, '$REPO_DIR/scripts')
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
 p = '$dst'
 if needs_sanitize_for_copilot(p):
@@ -990,7 +990,7 @@ else:
                 # with "missing or malformed YAML frontmatter"). See skill_sanitize.py.
                 python3 -c "
 import sys
-sys.path.insert(0, '/home/chaz/scripts/ai-skillweave/scripts')
+sys.path.insert(0, '$REPO_DIR/scripts')
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
 p = '$dst_dir/SKILL.md'
 if needs_sanitize_for_copilot(p):

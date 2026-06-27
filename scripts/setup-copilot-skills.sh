@@ -86,7 +86,7 @@ command -v copilot >/dev/null 2>&1 || warn "Copilot CLI not on PATH — install 
 log "Sweeping block-scalar frontmatter in Claude skills tree..."
 sweep_output=$(python3 - << 'PYEOF' 2>&1
 import sys, os, glob
-sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
+sys.path.insert(0, os.environ.get("REPO_DIR", "") + "/scripts")
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
 top = glob.glob(os.path.expanduser("~/.claude/skills/*/SKILL.md"))
 unique = list({os.path.realpath(p): p for p in top}.values())
@@ -154,7 +154,7 @@ if [ "$ACTION" = "check" ]; then
     # by Copilot CLI's line-oriented parser (block-scalar descriptions).
     bad_count=$(python3 - << 'PYEOF' 2>/dev/null
 import sys, os, glob
-sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
+sys.path.insert(0, os.environ.get("REPO_DIR", "") + "/scripts")
 from skill_sanitize import needs_sanitize_for_copilot
 top = glob.glob(os.path.expanduser("~/.claude/skills/*/SKILL.md"))
 unique = list({os.path.realpath(p): p for p in top}.values())
