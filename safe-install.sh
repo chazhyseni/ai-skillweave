@@ -804,6 +804,25 @@ link_native_skills() {
         if [ ! -f "$dst" ]; then
             mkdir -p "$dst_dir"
             cp "$src_file" "$dst"
+            # Sanitize frontmatter in-place so Copilot CLI / Codex / OpenClaw /
+            # Pi don't reject block-scalar descriptions or extra fields. Without
+            # this, 100+ source skills with `description: >` (folded scalar)
+            # would render as "missing or malformed YAML frontmatter" in
+            # GitHub Copilot — see scripts/skill_sanitize.py for the rules.
+            python3 -c "
+import sys
+sys.path.insert(0, '/home/chaz/scripts/ai-skillweave/scripts')
+from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
+p = '$dst'
+if needs_sanitize_for_copilot(p):
+    with open(p) as f:
+        orig = f.read()
+    new = sanitize_skill_md(p)
+    # Body preservation guard — refuse to write if body length changed
+    if len(orig.split('---', 2)[2]) == len(new.split('---', 2)[2]):
+        with open(p, 'w') as f:
+            f.write(new)
+" 2>/dev/null || true
             claude_count=$((claude_count + 1))
         fi
     done
@@ -881,6 +900,19 @@ link_native_skills() {
             if [ ! -f "$dst" ]; then
                 mkdir -p "$dst_dir"
                 cp "$dir/SKILL.md" "$dst"
+                # Sanitize frontmatter for Copilot CLI compatibility (block-scalar
+                # descriptions like `description: >` cause Copilot to reject the file
+                # with "missing or malformed YAML frontmatter"). See skill_sanitize.py.
+                python3 -c "
+import sys
+sys.path.insert(0, '/home/chaz/scripts/ai-skillweave/scripts')
+from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
+p = '$dst'
+if needs_sanitize_for_copilot(p):
+    new = sanitize_skill_md(p)
+    with open(p, 'w') as f:
+        f.write(new)
+" 2>/dev/null || true
                 science_count=$((science_count + 1))
             fi
         done
@@ -953,6 +985,19 @@ else:
             if [ ! -f "$dst_dir/SKILL.md" ]; then
                 mkdir -p "$dst_dir"
                 cp "$dir/SKILL.md" "$dst_dir/SKILL.md"
+                # Sanitize frontmatter for Copilot CLI compatibility (block-scalar
+                # descriptions like `description: >` cause Copilot to reject the file
+                # with "missing or malformed YAML frontmatter"). See skill_sanitize.py.
+                python3 -c "
+import sys
+sys.path.insert(0, '/home/chaz/scripts/ai-skillweave/scripts')
+from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
+p = '$dst_dir/SKILL.md'
+if needs_sanitize_for_copilot(p):
+    new = sanitize_skill_md(p)
+    with open(p, 'w') as f:
+        f.write(new)
+" 2>/dev/null || true
                 # Copy Python scripts and examples if present (ClawBio includes executable scripts)
                 cp -r "$dir/examples" "$dst_dir/" 2>/dev/null || true
                 cp "$dir"/*.py "$dst_dir/" 2>/dev/null || true

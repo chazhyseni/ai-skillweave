@@ -20,6 +20,13 @@
 # and covers harnesses that look for skills by name before the symlink is
 # resolved.
 #
+# YAML frontmatter sweep: every run also walks ~/.claude/skills and
+# flattens any `description: >` block-scalar frontmatter (Copilot CLI's
+# line-oriented parser rejects those with "missing or malformed YAML
+# frontmatter"). Idempotent — clean files are skipped. The same
+# sanitization happens inside safe-install.sh on every fresh skill copy,
+# so this sweep is the backstop for skills installed before the guard.
+#
 # Idempotent: re-running this script is safe and updates the symlink atomically.
 #
 # Usage:
@@ -72,6 +79,48 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 [ -d "$CLAUDE_SKILLS_DIR" ] || error "Claude skills dir not found: $CLAUDE_SKILLS_DIR — run ./safe-install.sh first"
 command -v copilot >/dev/null 2>&1 || warn "Copilot CLI not on PATH — install with: npm install -g @github/copilot"
 
+# --- Sweep stale block-scalar frontmatter in ~/.claude/skills ---
+# This handles skills that were installed before the sanitization guard was
+# added to safe-install.sh. Idempotent: needs_sanitize_for_copilot() returns
+# False for clean files, so this is a no-op on every subsequent run.
+log "Sweeping block-scalar frontmatter in Claude skills tree..."
+sweep_output=$(python3 - << 'PYEOF' 2>&1
+import sys, os, glob
+sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
+from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
+top = glob.glob(os.path.expanduser("~/.claude/skills/*/SKILL.md"))
+unique = list({os.path.realpath(p): p for p in top}.values())
+fixed = 0
+errors = []
+for p in unique:
+    if needs_sanitize_for_copilot(p):
+        try:
+            new = sanitize_skill_md(p)
+            orig_body = open(p).read().split("---", 2)[2]
+            new_body = new.split("---", 2)[2]
+            if len(orig_body) != len(new_body):
+                errors.append(f"body length changed: {p}")
+                continue
+            with open(p, "w") as f:
+                f.write(new)
+            fixed += 1
+        except Exception as e:
+            errors.append(f"{p}: {e}")
+print(f"swept {len(unique)} skills, sanitized {fixed}")
+if errors:
+    print("errors:")
+    for e in errors[:5]:
+        print(f"  {e}")
+PYEOF
+)
+echo "$sweep_output" | while IFS= read -r line; do
+    if [[ "$line" == *"errors:"* ]] || [[ "$line" == *"  "* ]]; then
+        warn "$line"
+    elif [ -n "$line" ]; then
+        success "$line"
+    fi
+done
+
 # === Check-only mode ===
 if [ "$ACTION" = "check" ]; then
     log "Verifying Copilot skill bridge..."
@@ -100,6 +149,22 @@ if [ "$ACTION" = "check" ]; then
         else
             warn "Read-test FAILED: $rel not accessible via $COPILOT_SKILLS_LINK"
         fi
+    fi
+    # YAML frontmatter check: count SKILL.md files that would still be rejected
+    # by Copilot CLI's line-oriented parser (block-scalar descriptions).
+    bad_count=$(python3 - << 'PYEOF' 2>/dev/null
+import sys, os, glob
+sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
+from skill_sanitize import needs_sanitize_for_copilot
+top = glob.glob(os.path.expanduser("~/.claude/skills/*/SKILL.md"))
+unique = list({os.path.realpath(p): p for p in top}.values())
+print(sum(1 for p in unique if needs_sanitize_for_copilot(p)))
+PYEOF
+)
+    if [ "$bad_count" = "0" ]; then
+        success "YAML check: 0 skills rejected by Copilot's frontmatter parser"
+    else
+        warn "YAML check: $bad_count skills still have Copilot-incompatible frontmatter (run without --check to auto-sanitize)"
     fi
     exit 0
 fi
