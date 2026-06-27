@@ -815,13 +815,17 @@ sys.path.insert(0, '$REPO_DIR/scripts')
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
 p = '$dst'
 if needs_sanitize_for_copilot(p):
-    with open(p) as f:
-        orig = f.read()
     new = sanitize_skill_md(p)
+    orig_parts = open(p).read().split('---', 2)
+    new_parts = new.split('---', 2)
     # Body preservation guard — refuse to write if body length changed
-    if len(orig.split('---', 2)[2]) == len(new.split('---', 2)[2]):
-        with open(p, 'w') as f:
-            f.write(new)
+    # by more than 4 bytes (allows for quoting/field reformatting that
+    # shifts the frontmatter/body boundary without altering content).
+    if len(orig_parts) >= 3 and len(new_parts) >= 3:
+        if abs(len(orig_parts[2]) - len(new_parts[2])) > 4:
+            sys.exit(1)
+    with open(p, 'w') as f:
+        f.write(new)
 " 2>/dev/null || true
             claude_count=$((claude_count + 1))
         fi

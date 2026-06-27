@@ -772,14 +772,22 @@ if os.path.isdir(os.path.join(home, ".claude")):
             # Valid symlink — copy SKILL.md into the symlinked directory
             if os.path.exists(dst) and src_mtime <= os.path.getmtime(dst):
                 continue  # Already up to date
-            shutil.copy2(src, dst)
+            if needs_sanitize(src):
+                with open(dst, "w") as f:
+                    f.write(sanitize_skill_md(src))
+            else:
+                shutil.copy2(src, dst)
             claude_updated += 1
             continue
         # Regular directory case
         if os.path.exists(dst) and src_mtime <= os.path.getmtime(dst):
             continue  # Already up to date
         os.makedirs(dst_dir, exist_ok=True)
-        shutil.copy2(src, dst)
+        if needs_sanitize(src):
+            with open(dst, "w") as f:
+                f.write(sanitize_skill_md(src))
+        else:
+            shutil.copy2(src, dst)
         claude_updated += 1
     # Also sync learned skills (flat .md in learned/ subdir — leave as-is)
     claude_total = len([d for d in os.listdir(claude_skills)
