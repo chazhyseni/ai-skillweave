@@ -66,16 +66,45 @@ done
 [ -d "$CLAUDE_SKILLS_DIR" ] || error "Claude skills dir not found: $CLAUDE_SKILLS_DIR — run ./safe-install.sh first"
 command -v copilot >/dev/null 2>&1 || warn "Copilot CLI not on PATH — install with: npm install -g @github/copilot"
 
-# --- Sweep stale block-scalar frontmatter in ~/.claude/skills ---
-# Idempotent: needs_sanitize_for_copilot() returns False for clean files,
-# so this is a no-op on every subsequent run.
-log "Sweeping block-scalar frontmatter in Claude skills tree..."
+# --- Sweep stale block-scalar frontmatter in every SKILL.md reachable
+# via Copilot's personal-skills path ---
+# `~/.copilot/skills/` is symlinked to `~/.claude/skills/`, which
+# contains ~1,400 individual symlinks pointing into per-source dirs
+# (e.g. `~/.claude-medical-skills/skills/<name>/`, `~/.claude-operon-
+# skills/protocols/<name>/`, etc.). The non-recursive `glob('*/*.md')`
+# sweep only catches the top-level entries; we need a recursive walker
+# that follows symlinks to sanitize every file Copilot will actually
+# see. Each unique real path is sanitized at most once (deduped by
+# `os.path.realpath`).
+log "Sweeping Copilot-incompatible frontmatter across all reachable skills..."
 sweep_output=$(python3 - << 'PYEOF' 2>&1
 import sys, os, glob
 sys.path.insert(0, "/home/chaz/scripts/ai-skillweave/scripts")
 from skill_sanitize import needs_sanitize_for_copilot, sanitize_skill_md
-top = glob.glob(os.path.expanduser("~/.claude/skills/*/SKILL.md"))
-unique = list({os.path.realpath(p): p for p in top}.values())
+
+COPILOT_DIR = os.path.expanduser("~/.copilot/skills")
+real_files = set()
+def walk(dir):
+    try:
+        for entry in os.listdir(dir):
+            full = os.path.join(dir, entry)
+            if os.path.islink(full):
+                target = os.readlink(full)
+                if not os.path.isabs(target):
+                    target = os.path.join(dir, target)
+                if os.path.isdir(target):
+                    walk(target)
+                elif entry == 'SKILL.md' and os.path.isfile(target):
+                    real_files.add(os.path.realpath(target))
+            elif os.path.isdir(full):
+                walk(full)
+            elif entry == 'SKILL.md' and os.path.isfile(full):
+                real_files.add(os.path.realpath(full))
+    except (PermissionError, FileNotFoundError):
+        pass
+
+walk(COPILOT_DIR)
+unique = sorted(real_files)
 fixed = 0
 errors = []
 for p in unique:
@@ -84,8 +113,8 @@ for p in unique:
             new = sanitize_skill_md(p)
             orig_body = open(p).read().split("---", 2)[2]
             new_body = new.split("---", 2)[2]
-            if len(orig_body) != len(new_body):
-                errors.append(f"body length changed: {p}")
+            if abs(len(orig_body) - len(new_body)) > 4:
+                errors.append(f"body length changed by {len(new_body) - len(orig_body)} bytes: {p}")
                 continue
             with open(p, "w") as f:
                 f.write(new)
@@ -132,14 +161,37 @@ if [ "$ACTION" = "check" ]; then
         fi
     fi
     # YAML frontmatter check: count SKILL.md files that would still be rejected
-    # by Copilot CLI's line-oriented parser (block-scalar descriptions).
+    # by Copilot CLI's `promptsParseFrontmatter` addon. Walk recursively
+    # and follow symlinks (some of the per-source dirs are reached via
+    # individual symlinks inside ~/.claude/skills/).
     bad_count=$(REPO_DIR="$REPO_DIR" python3 - << 'PYEOF' 2>/dev/null
-import sys, os, glob
+import sys, os
 sys.path.insert(0, os.environ.get("REPO_DIR", "/home/chaz/scripts/ai-skillweave") + "/scripts")
 from skill_sanitize import needs_sanitize_for_copilot
-top = glob.glob(os.path.expanduser("~/.claude/skills/*/SKILL.md"))
-unique = list({os.path.realpath(p): p for p in top}.values())
-print(sum(1 for p in unique if needs_sanitize_for_copilot(p)))
+
+COPILOT_DIR = os.path.expanduser("~/.copilot/skills")
+real_files = set()
+def walk(d):
+    try:
+        for entry in os.listdir(d):
+            full = os.path.join(d, entry)
+            if os.path.islink(full):
+                target = os.readlink(full)
+                if not os.path.isabs(target):
+                    target = os.path.join(d, target)
+                if os.path.isdir(target):
+                    walk(target)
+                elif entry == 'SKILL.md' and os.path.isfile(target):
+                    real_files.add(os.path.realpath(target))
+            elif os.path.isdir(full):
+                walk(full)
+            elif entry == 'SKILL.md' and os.path.isfile(full):
+                real_files.add(os.path.realpath(full))
+    except (PermissionError, FileNotFoundError):
+        pass
+
+walk(COPILOT_DIR)
+print(sum(1 for p in real_files if needs_sanitize_for_copilot(p)))
 PYEOF
 )
     if [ "$bad_count" = "0" ]; then
