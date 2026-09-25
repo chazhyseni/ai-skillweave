@@ -13,7 +13,8 @@ import urllib.request
 
 import yaml
 
-from skill_sync import SOURCES, actual_file, harness_roots, load_json, safe_relative
+from skill_sync import SOURCES, harness_roots, load_json
+from skill_delivery import actual_file, safe_relative
 from skill_sanitize import sanitize_skill_md
 
 

@@ -57,6 +57,15 @@ def sanitize_skill_md(path: str | Path) -> str:
     return "---\n" + header + "---\n" + prefix + body
 
 
+def skill_name(path: str | Path) -> str:
+    """Use the same declared identity as native harness loaders."""
+    data, _, _ = _parse(Path(path).read_text(encoding="utf-8"), path)
+    name = data["name"].strip()
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise ValueError(f"{path}: skill name must contain lowercase letters, digits and single hyphens")
+    return name
+
+
 def needs_sanitize(path: str | Path) -> bool:
     return sanitize_skill_md(path) != Path(path).read_text(encoding="utf-8")
 

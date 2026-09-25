@@ -19,6 +19,7 @@ Usage: bash install.sh [OPTIONS]
   --no-learn          Skip learning dependencies, extraction and hooks (default)
   --no-llm            Regex-only extraction when --learn is selected
   --offline          Propagate existing checkouts without fetching
+  --repair-conflicts Back up conflicting skill copies before replacing them
   --backend NAME      Opt in to ollama or llama.cpp model configuration
   --model MODEL       Model ID/server alias (implies ollama unless --backend set)
   --base-url URL      Backend URL; loopback by default
@@ -53,7 +54,7 @@ while [ "$#" -gt 0 ]; do
             esac
             shift 2 ;;
         --allow-remote) export SKILLWEAVE_LLM_ALLOW_REMOTE=1; MODEL_ARGS+=("$1"); MODEL_REQUESTED=true; shift ;;
-        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--offline|--no-llm)
+        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--offline|--no-llm|--repair-conflicts)
             SKILL_ARGS+=("$1"); shift ;;
         --learn) LEARN=true; shift ;;
         --no-learn) LEARN=false; shift ;;
@@ -94,9 +95,9 @@ if [ -n "$ONLY" ] && ! $SKIP_SKILLS; then
             source "$REPO_DIR/scripts/bootstrap-python.sh"
             skillweave_python "$REPO_DIR" false
             if [ "$ONLY" = omp ]; then
-                bash "$REPO_DIR/scripts/setup-omp-skills.sh"
+                bash "$REPO_DIR/scripts/setup-omp-skills.sh" "${SKILL_ARGS[@]}"
             else
-                bash "$REPO_DIR/scripts/update-ecc.sh" --offline --no-learn --harness "$ONLY"
+                bash "$REPO_DIR/scripts/update-ecc.sh" --offline --harness "$ONLY" "${SKILL_ARGS[@]}"
             fi
             ;;
     esac

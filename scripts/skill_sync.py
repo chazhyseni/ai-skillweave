@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 
-from skill_sanitize import sanitize_skill_md
+from skill_sanitize import sanitize_skill_md, skill_name
+from skill_delivery import atomic_write, sync_root
+from harness_paths import omp_agent_dirs
 
 # Low to high priority, matching the historical cross-harness source ordering.
 # id, checkout relative to HOME, upstream, skill roots (first existing wins).
@@ -48,18 +48,6 @@ def load_json(path: Path, default):
     except (OSError, ValueError) as exc:
         raise ValueError(f"Cannot read {path}; repair it before syncing: {exc}") from exc
 
-
-def atomic_write(path: Path, data: bytes, mode: int = 0o644):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=".skillweave-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(data)
-        os.chmod(temporary, mode)
-        os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
 def save_json(path: Path, value):
@@ -126,8 +114,6 @@ def skill_dirs(root: Path):
             dirs[:] = []
 
 
-def fingerprint(data: bytes, mode: int):
-    return {"sha256": hashlib.sha256(data).hexdigest(), "mode": mode}
 
 
 def payload(path: Path):
@@ -161,33 +147,8 @@ def payload(path: Path):
     return result
 
 
-def actual_file(path: Path):
-    if path.is_symlink() or not path.is_file():
-        return None
-    return fingerprint(path.read_bytes(), stat.S_IMODE(path.stat().st_mode))
 
 
-def safe_relative(value: str) -> Path:
-    path = Path(value)
-    if path.is_absolute() or ".." in path.parts or not path.parts:
-        raise ValueError(f"Unsafe manifest path: {value!r}")
-    return path
-
-
-def safe_parents(path: Path, root: Path):
-    current = path.parent
-    while current != root:
-        if current.is_symlink() or (current.exists() and not current.is_dir()):
-            return False
-        current = current.parent
-    return True
-
-
-def omp_agent_dirs(home: Path):
-    override = os.environ.get("SKILLWEAVE_OMP_AGENT_DIR")
-    if override:
-        return [Path(override).expanduser().absolute()]
-    return [home / ".omp/agent", *sorted((home / ".omp/profiles").glob("*/agent"))]
 
 
 def harness_roots(home: Path):
@@ -195,95 +156,13 @@ def harness_roots(home: Path):
         "claude": [home / ".claude/skills"],
         "codex": [home / ".agents/skills"],
         "openclaw": [home / ".openclaw/workspace/skills"],
-        "pi": [home / ".pi/agent/skills"],
+        "pi": [Path(os.environ.get("PI_CODING_AGENT_DIR", home / ".pi/agent")).expanduser() / "skills"],
         "copilot": [home / ".copilot/skills"],
         "hermes": [home / ".hermes/skills/ai-skillweave"],
         "omp": [directory / "skills" for directory in omp_agent_dirs(home)],
     }
 
 
-def sync_root(root: Path, desired: dict, records: dict, protected: set, args, legacy: set) -> int:
-    conflicts = 0
-    for name in sorted(set(desired) | set(records)):
-        if len(safe_relative(name).parts) != 1:
-            raise ValueError(f"Invalid skill directory in manifest: {name!r}")
-        target = root / name
-        old = records.get(name)
-        wanted = desired.get(name)
-        if old and old.get("source") in protected and (wanted is None or wanted[0] != old["source"]):
-            print(f"PRESERVED {target}: source unavailable")
-            continue
-        if wanted is None and args.no_prune:
-            continue
-        files = wanted[2] if wanted else {}
-        expected = {rel: fingerprint(*item) for rel, item in files.items()}
-        replacing_link = False
-        if target.is_symlink():
-            # Safe cutover from the old source-directory symlink convention.
-            if wanted and target.resolve() == wanted[1].resolve():
-                print(f"{'WOULD REPLACE' if args.preview else 'REPLACE'} source symlink {target}")
-                replacing_link = True
-                if not args.preview:
-                    target.unlink()
-                old = None
-            else:
-                print(f"CONFLICT {target}: symlink preserved; move it aside to permit managed copies", file=sys.stderr)
-                conflicts += 1
-                continue
-        elif old is None and target.exists():
-            # A legacy name list is not ownership proof. Only exact content is.
-            existing = {p.relative_to(target).as_posix(): actual_file(p)
-                        for p in target.rglob("*") if p.is_file() or p.is_symlink()} if target.is_dir() else {}
-            if name in legacy and existing and all(expected.get(k) == v and v is not None for k, v in existing.items()):
-                old = {"source": wanted[0], "files": existing}
-            else:
-                print(f"CONFLICT {target}: unmanaged skill preserved; rename/move it aside or disable its upstream source", file=sys.stderr)
-                conflicts += 1
-                continue
-        old_files = dict(old.get("files", {})) if old else {}
-        retained = dict(old_files)
-        for relative in sorted(set(files) | set(old_files)):
-            destination = target / safe_relative(relative)
-            if not (args.preview and replacing_link) and not safe_parents(destination, root):
-                print(f"CONFLICT {destination}: parent is a symlink or non-directory", file=sys.stderr)
-                conflicts += 1
-                continue
-            present = not replacing_link and (destination.exists() or destination.is_symlink())
-            actual = actual_file(destination) if present else None
-            previous = old_files.get(relative)
-            upcoming = expected.get(relative)
-            if previous is not None and present and actual != previous and actual != upcoming:
-                print(f"CONFLICT {destination}: locally edited; preserved. Merge with {wanted[1] if wanted else 'upstream deletion'}, then move this file aside and rerun", file=sys.stderr)
-                conflicts += 1
-                continue
-            if previous is None and present:
-                print(f"CONFLICT {destination}: unowned file preserved; move aside before syncing", file=sys.stderr)
-                conflicts += 1
-                continue
-            if upcoming is not None:
-                if actual != upcoming:
-                    print(f"{'WOULD WRITE' if args.preview else 'WRITE'} {destination}")
-                    if not args.preview:
-                        atomic_write(destination, *files[relative])
-                retained[relative] = upcoming
-            elif not args.no_prune:
-                if present:
-                    print(f"{'WOULD PRUNE' if args.preview else 'PRUNE'} {destination}")
-                    if not args.preview:
-                        destination.unlink()
-                retained.pop(relative, None)
-        if retained:
-            records[name] = {"source": wanted[0] if wanted else old["source"], "files": retained}
-        else:
-            records.pop(name, None)
-        if not args.preview and target.is_dir() and not target.is_symlink():
-            # Remove empty directories only. Personal additions are never removed.
-            for directory, _, _ in os.walk(target, topdown=False):
-                try:
-                    Path(directory).rmdir()
-                except OSError:
-                    pass
-    return conflicts
 
 
 def rebuild_cache(cache: Path, desired: dict, preview: bool):
@@ -309,6 +188,8 @@ def parser():
     result.add_argument("--offline", "--no-fetch", action="store_true", help="sync existing source trees without network")
     result.add_argument("--no-prune", action="store_true")
     result.add_argument("--uninstall", action="store_true", help="remove unchanged manifest-owned files only")
+    result.add_argument("--repair-conflicts", action="store_true",
+                        help="back up conflicting skill directories, then replace with selected sources; personal additions remain in backups")
     result.add_argument("--harness", action="append", choices=("claude", "codex", "openclaw", "pi", "copilot", "hermes", "omp"))
     for group in GROUPS:
         selection = result.add_mutually_exclusive_group()
@@ -346,7 +227,6 @@ def main(argv=None):
             print(f"{source}\t{'enabled' if active[source] else 'disabled'}\t{home / relative}\thttps://github.com/{upstream}")
         return 0
     manifest = load_json(cache / "sync-manifest.json", {})
-    legacy = set(manifest.get("names", [])) if "version" not in manifest else set()
     if manifest.get("version") not in (None, 2):
         raise ValueError("Unknown sync manifest version; refusing to alter managed files")
     destinations = manifest.setdefault("destinations", {})
@@ -371,15 +251,17 @@ def main(argv=None):
             if root is None:
                 protected.add(source)
                 print(f"UNAVAILABLE {source}: no local skills root (existing managed files preserved)")
+                if not args.preview:
+                    errors += 1
                 continue
             for skill in skill_dirs(root):
-                name = skill.name
-                if source == "huggingface" and name not in HF_SKILLS:
+                if source == "huggingface" and skill.name not in HF_SKILLS:
                     continue
                 categories = preferences.get("bioskills_categories", [])
                 if source == "bioskills" and categories and skill.relative_to(root).parts[0] not in categories:
                     continue
                 try:
+                    name = skill_name(skill / "SKILL.md")
                     content = payload(skill)
                     if name in desired:
                         print(f"PRIORITY {name}: {source} overrides {desired[name][0]}")
@@ -393,7 +275,7 @@ def main(argv=None):
             if skill.name.startswith(".") or skill.name == "SKILL.md":
                 continue
             try:
-                desired[skill.stem] = ("learned", skill, payload(skill))
+                desired[skill_name(skill)] = ("learned", skill, payload(skill))
             except (OSError, ValueError) as exc:
                 protected.add("learned")
                 print(f"ERROR {exc}", file=sys.stderr)
@@ -434,12 +316,13 @@ def main(argv=None):
             if not args.preview:
                 root.mkdir(parents=True, exist_ok=True)
             records = destinations.setdefault(str(root), {})
-            errors += sync_root(root, desired, records, protected, args, legacy)
-            print(f"{harness}: {len(records)} managed skills at {root}")
+            root_errors = sync_root(root, desired, records, protected, args)
+            errors += root_errors
+            print(f"{harness}: {len(records)} ownership records, {root_errors} conflicting skill(s) at {root}")
     if (not errors and str(legacy_codex) in destinations
             and (not args.harness or "codex" in args.harness)
             and not legacy_codex.is_symlink()):
-        errors += sync_root(legacy_codex, {}, destinations[str(legacy_codex)], protected, args, set())
+        errors += sync_root(legacy_codex, {}, destinations[str(legacy_codex)], protected, args)
     if not args.preview:
         save_json(cache / "sync-manifest.json", {"version": 2, "destinations": destinations})
         if not args.uninstall:

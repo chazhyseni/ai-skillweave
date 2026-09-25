@@ -17,6 +17,7 @@ Usage: bash safe-install.sh [OPTIONS]
   --no-learn         No learning dependencies/extraction (default)
   --no-llm           Regex-only extraction with --learn
   --yes             Noninteractive compatibility flag; never overwrite user data
+  --repair-conflicts Back up differing legacy/edited skills before replacement
   --uninstall       Remove unchanged managed skills and shell block only
   --help, -h        Show help
 Fresh installs default to ECC; source choices persist. Existing checkouts and
@@ -28,7 +29,7 @@ HELP
 LEARN=false; UNINSTALL=false; NO_LLM=false; ARGS=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--with-ecc|--without-ecc|--offline)
+        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--with-ecc|--without-ecc|--offline|--repair-conflicts)
             ARGS+=("$1"); shift ;;
         --curated-only) ARGS+=(--without-ecc --with-curated); shift ;;
         --learn) LEARN=true; shift ;;
@@ -96,8 +97,10 @@ files = ['safe-install.sh', 'sync-learned-skills.sh', 'extract-conversation-skil
          'model_backend.py', 'requirements.txt', 'requirements-learning.txt',
          'configs/zshrc-skills-block.sh', 'scripts/bootstrap-python.sh',
          'scripts/update-ecc.sh', 'scripts/skill_sync.py', 'scripts/skill_sanitize.py',
+         'scripts/skill_delivery.py', 'scripts/harness_paths.py',
          'scripts/setup-copilot-skills.sh', 'scripts/setup-omp-skills.sh',
-         'scripts/verify.sh', 'scripts/verify_setup.py', 'scripts/install-bioskills.sh']
+         'scripts/verify.sh', 'scripts/verify_setup.py', 'scripts/verify-omp.sh',
+         'scripts/verify_omp.py', 'scripts/install-bioskills.sh']
 manifest = dest / '.skillweave-runtime.json'
 owned = json.loads(manifest.read_text()) if manifest.exists() else {}
 def digest(path):

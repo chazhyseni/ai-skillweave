@@ -24,7 +24,7 @@ Usage:
 Options:
     --input DIR         Directory with conversation exports (auto-detect if not set)
     --output DIR        Directory to write generated skills (default: ~/.claude/skills/learned/)
-    --harness H         Which harness to extract from: claude|codex|openclaw|all (default: all)
+    --harness H         Extract from claude|codex|openclaw|pi|omp|all (default: all)
     --dry-run           Show what would be extracted without writing files
     --verbose           Show detailed analysis
     --stats             Show usage/decay statistics only (no extraction)
@@ -52,6 +52,7 @@ from typing import Dict, List, Set, Tuple, Optional
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from model_backend import BackendError, ModelBackend, add_backend_arguments, backend_from_args
+from scripts.harness_paths import omp_session_dirs
 
 
 
@@ -70,7 +71,7 @@ OPENCLAW_HISTORY_PATHS = [
     Path.home() / ".openclaw" / "agents",    # OpenClaw: agents/main/sessions/*.jsonl
 ]
 PI_HISTORY_PATHS = [
-    Path.home() / ".pi" / "agent" / "sessions",  # Pi: agent/sessions/<project>/*.jsonl
+    Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi" / "agent")).expanduser() / "sessions",
 ]
 DEFAULT_OUTPUT_DIR = Path.home() / ".claude" / "skills" / "learned"
 USAGE_FILE = DEFAULT_OUTPUT_DIR / ".usage.json"
@@ -669,7 +670,7 @@ class Ingestion:
         if harness == "codex" and len(parts) >= 3:
             # ~/.codex/sessions/YYYY/MM/DD/rollout-uuid.jsonl
             return f"codex-{parts[2].name}"  # date-based grouping
-        if harness == "pi" and len(parts) >= 2:
+        if harness in ("pi", "omp") and len(parts) >= 2:
             return parts[0].name
         if harness == "openclaw" and len(parts) >= 2:
             return parts[0].name
@@ -698,7 +699,7 @@ class Ingestion:
             if payload.get("type") == "user_message":
                 return payload.get("message", "")
 
-        # OpenClaw/Pi: message type with message.content
+        # OpenClaw/Pi/OMP: message events with message.content text blocks.
         if data.get("type") == "message":
             msg = data.get("message", {})
             role = msg.get("role", "")
@@ -1835,6 +1836,10 @@ class Pipeline:
                 if p.exists():
                     sources.append(("pi", p))
                     break
+        if harness in ("omp", "all"):
+            for p in omp_session_dirs(Path.home()):
+                if p.exists() and all(p.resolve() != existing.resolve() for _, existing in sources):
+                    sources.append(("omp", p))
         if self.verbose:
             if not sources:
                 print("  No input sources found. Searched:")
@@ -1842,6 +1847,7 @@ class Pipeline:
                 print(f"    Codex:   {CODEX_HISTORY_PATHS}")
                 print(f"    OpenClaw:{OPENCLAW_HISTORY_PATHS}")
                 print(f"    Pi:      {PI_HISTORY_PATHS}")
+                print(f"    OMP:     {omp_session_dirs(Path.home())}")
             else:
                 for name, path in sources:
                     print(f"  Found: {name} → {path}")
@@ -1954,7 +1960,7 @@ def main():
     )
     parser.add_argument("--input", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--harness", choices=["claude", "codex", "openclaw", "pi", "all"], default="all")
+    parser.add_argument("--harness", choices=["claude", "codex", "openclaw", "pi", "omp", "all"], default="all")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     llm_mode = parser.add_mutually_exclusive_group()

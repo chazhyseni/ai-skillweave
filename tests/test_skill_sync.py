@@ -46,6 +46,8 @@ class SkillSyncTests(unittest.TestCase):
         self.env = {**os.environ, "HOME": str(self.home), "PYTHONDONTWRITEBYTECODE": "1",
                     "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
         self.env.pop("SKILLWEAVE_OMP_AGENT_DIR", None)
+        for key in ("OMP_PROFILE", "PI_PROFILE", "PI_CONFIG_DIR", "PI_CODING_AGENT_DIR", "XDG_DATA_HOME"):
+            self.env.pop(key, None)
         self.source = self.home / ".claude-everything-claude-code/skills"
         self.source.mkdir(parents=True)
         self.all_harnesses = [arg for name in HARNESSES for arg in ("--harness", name)]
@@ -161,6 +163,83 @@ class SkillSyncTests(unittest.TestCase):
         for relative in HARNESSES.values():
             self.assertFalse((self.home / relative / "science-example/SKILL.md").exists())
         self.assertTrue((science / "science-example/SKILL.md").exists())
+
+    def test_identical_legacy_copy_is_adopted_and_missing_assets_are_added(self):
+        source = self.skill(self.source)
+        target = self.home / HARNESSES["omp"] / "example"
+        target.mkdir(parents=True)
+        shutil.copy2(source / "SKILL.md", target / "SKILL.md")
+        (source / "helper.txt").write_text("required resource")
+        self.offline()
+        self.assertEqual((target / "helper.txt").read_text(), "required resource")
+        self.skill(self.source, body="Revision after ownership migration")
+        self.offline()
+        self.assertIn("Revision after ownership migration", (target / "SKILL.md").read_text())
+
+    def test_conflict_recovery_backs_up_complete_skill_and_preview_is_read_only(self):
+        source = self.skill(self.source)
+        self.offline()
+        target = self.home / HARNESSES["omp"] / "example"
+        (target / "SKILL.md").write_text("personal edits")
+        (target / "notes.txt").write_text("keep private notes")
+        (source / "helper.txt").write_text("new helper")
+        before = snapshot(self.home)
+        self.offline("--repair-conflicts", "--dry-run")
+        self.assertEqual(snapshot(self.home), before)
+        self.offline("--repair-conflicts")
+        backup = list((target.parent.parent / "skillweave-backups").glob("*/example"))
+        self.assertEqual(len(backup), 1)
+        self.assertEqual((backup[0] / "SKILL.md").read_text(), "personal edits")
+        self.assertEqual((backup[0] / "notes.txt").read_text(), "keep private notes")
+        self.assertEqual((target / "helper.txt").read_text(), "new helper")
+        self.offline()
+        self.assertEqual(len(list((target.parent.parent / "skillweave-backups").iterdir())), 1)
+
+    def test_conflicting_asset_prevents_partial_skill_update(self):
+        source = self.skill(self.source)
+        (source / "run.sh").write_text("old program")
+        self.offline()
+        target = self.home / HARNESSES["omp"] / "example"
+        previous = (target / "SKILL.md").read_bytes()
+        (target / "run.sh").write_text("locally modified program")
+        self.skill(self.source, body="Instructions for the new program")
+        (source / "run.sh").write_text("new program")
+        self.offline(expected=1)
+        self.assertEqual((target / "SKILL.md").read_bytes(), previous)
+        self.assertEqual((target / "run.sh").read_text(), "locally modified program")
+
+    def test_declared_names_control_priority_and_legacy_alias_recovery(self):
+        science = self.home / ".claude-scientific-skills/skills"
+        low = self.skill(self.source, name="canonical")
+        low.rename(self.source / "old-folder")
+        self.skill(science, name="canonical", body="Lower priority science")
+        # ECC wins even though its directory name differs; OMP names come from YAML.
+        target = self.home / HARNESSES["omp"]
+        legacy = target / "old-folder"
+        legacy.mkdir(parents=True)
+        shutil.copy2(self.source / "old-folder/SKILL.md", legacy / "SKILL.md")
+        self.offline(expected=1)
+        self.assertFalse((target / "canonical").exists())
+        self.offline("--repair-conflicts")
+        self.assertFalse(legacy.exists())
+        self.assertIn("measured evidence", (target / "canonical/SKILL.md").read_text())
+        self.assertEqual(list(target.glob("*/SKILL.md")), [target / "canonical/SKILL.md"])
+        self.assertTrue(list((target.parent / "skillweave-backups").glob("*/old-folder/SKILL.md")))
+
+    def test_active_omp_profile_controls_model_and_skill_destination(self):
+        self.skill(self.source)
+        self.env["OMP_PROFILE"] = "research"
+        self.env["PI_CODING_AGENT_DIR"] = str(self.home / "unrelated-agent")
+        self.run_sync("--offline", "--harness", "omp")
+        agent = self.home / ".omp/profiles/research/agent"
+        self.assertTrue((agent / "skills/example/SKILL.md").is_file())
+        result = subprocess.run([sys.executable, str(REPO / "scripts/setup_model_backend.py"),
+                                 "omp", "--backend", "llama.cpp", "--model", "research-local"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((agent / "models.yml").is_file())
+        self.assertFalse((self.home / ".omp/agent/models.yml").exists())
+        self.assertFalse((self.home / "unrelated-agent").exists())
 
     def git(self, cwd, *args):
         result = subprocess.run(["git", "-C", str(cwd), *args], env=self.env,

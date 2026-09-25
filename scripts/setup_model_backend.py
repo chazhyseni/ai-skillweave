@@ -15,6 +15,7 @@ sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from model_backend import add_backend_arguments, backend_from_args
+from harness_paths import omp_agent_dirs
 
 
 def load_config(path):
@@ -137,7 +138,7 @@ def main():
         pending.extend(((models_path, json.dumps(models, indent=2) + "\n"), (settings_path, json.dumps(settings, indent=2) + "\n")))
         launch = "pi"
     elif args.harness == "omp":
-        agent_dir = Path(os.environ.get("SKILLWEAVE_OMP_AGENT_DIR", home / ".omp" / "agent"))
+        agent_dir = omp_agent_dirs(home, all_profiles=False)[0]
         target = agent_dir / "models.yml"
         if not target.exists() and (agent_dir / "models.yaml").exists():
             target = agent_dir / "models.yaml"
