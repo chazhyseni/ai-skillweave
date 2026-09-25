@@ -18,6 +18,7 @@ Usage: bash safe-install.sh [OPTIONS]
   --no-llm           Regex-only extraction with --learn
   --yes             Noninteractive compatibility flag; never overwrite user data
   --repair-conflicts Back up differing legacy/edited skills before replacement
+  --repair-sources   Clone upstream before backing up legacy/dirty source trees
   --uninstall       Remove unchanged managed skills and shell block only
   --help, -h        Show help
 Fresh installs default to ECC; source choices persist. Existing checkouts and
@@ -29,7 +30,7 @@ HELP
 LEARN=false; UNINSTALL=false; NO_LLM=false; ARGS=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--with-ecc|--without-ecc|--offline|--repair-conflicts)
+        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--with-ecc|--without-ecc|--offline|--repair-conflicts|--repair-sources)
             ARGS+=("$1"); shift ;;
         --curated-only) ARGS+=(--without-ecc --with-curated); shift ;;
         --learn) LEARN=true; shift ;;
@@ -41,6 +42,9 @@ while [ "$#" -gt 0 ]; do
         *) error "Unknown option: $1 (see --help)" ;;
     esac
 done
+if [[ " ${ARGS[*]} " == *" --repair-sources "* ]]; then
+    ! $UNINSTALL && [[ " ${ARGS[*]} " != *" --offline "* ]] || error '--repair-sources cannot be combined with --offline or --uninstall.'
+fi
 command -v python3 >/dev/null 2>&1 || error 'Python 3 is required; install it with your package manager.'
 # Only remove complete, recognized managed blocks; never source user rc files.
 shell_integration() {

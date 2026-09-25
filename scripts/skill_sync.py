@@ -25,7 +25,7 @@ SOURCES = (
     ("medical", ".claude-medical-skills", "FreedomIntelligence/OpenClaw-Medical-Skills", ("skills",)),
     ("tooluniverse", ".claude-tooluniverse", "mims-harvard/ToolUniverse", ("skills",)),
     ("life-sciences", ".claude-life-sciences", "anthropics/life-sciences", (".",)),
-    ("bionemo", ".claude-bionemo-skills", "NVIDIA-BioNeMo/bionemo-agent-toolkit", (".",)),
+    ("bionemo", ".claude-bionemo-skills", "NVIDIA-BioNeMo/bionemo-agent-toolkit", ("skills/bionemo-agent-toolkit/skills", ".")),
     ("nature-paper", ".claude-nature-paper-skills", "Boom5426/Nature-Paper-Skills", ("skills",)),
     ("deepmind", ".claude-deepmind-skills", "google-deepmind/science-skills", ("skills",)),
     ("huggingface", ".claude-huggingface-skills", "huggingface/skills", ("skills",)),
@@ -62,29 +62,65 @@ def git(path: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def update_source(path: Path, upstream: str, preview: bool, offline: bool):
+def clone_source(path: Path, upstream: str, replace: bool = False):
+    """Clone before moving existing data; retain the complete old source outside discovery."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".skillweave-clone-", dir=path.parent) as tmp:
+        candidate = Path(tmp) / "repo"
+        result = subprocess.run(["git", "clone", "--depth", "1", "--quiet",
+                                 f"https://github.com/{upstream}.git", str(candidate)])
+        if result.returncode:
+            raise RuntimeError(f"Clone failed for {upstream}; existing source unchanged")
+        git(candidate, "rev-parse", "--verify", "HEAD")
+        backup = None
+        if replace:
+            backup_root = path.parent / "skillweave-source-backups"
+            if backup_root.is_symlink():
+                raise RuntimeError(f"Refusing symlinked source backup root: {backup_root}")
+            backup_root.mkdir(exist_ok=True)
+            backup = Path(tempfile.mkdtemp(prefix=path.name + "-", dir=backup_root)) / path.name
+            path.rename(backup)
+            print(f"SOURCE BACKUP {path} -> {backup}", flush=True)
+        try:
+            candidate.rename(path)
+        except OSError:
+            if backup is not None:
+                # If restoration itself fails, the printed backup remains intact.
+                backup.rename(path)
+            raise
+    print(f"{'REPLACED' if replace else 'CLONED'} {upstream}")
+
+
+def update_source(path: Path, upstream: str, preview: bool, offline: bool,
+                  repair: bool = False, use_local: bool = False):
     if offline:
         return
+    if path.is_symlink():
+        raise RuntimeError(f"{path}: source symlink preserved; use --offline or manage its target explicitly")
     if not path.exists():
         if preview:
             print(f"MISSING {path}: would clone https://github.com/{upstream}.git")
             return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # Clone beside destination; a failed clone never leaves a partial source.
-        with tempfile.TemporaryDirectory(prefix=".skillweave-clone-", dir=path.parent) as tmp:
-            result = subprocess.run(["git", "clone", "--depth", "1", "--quiet",
-                                     f"https://github.com/{upstream}.git", str(Path(tmp) / "repo")])
-            if result.returncode:
-                raise RuntimeError(f"Clone failed for {upstream}")
-            os.rename(Path(tmp) / "repo", path)
-        print(f"CLONED {upstream}")
+        clone_source(path, upstream)
         return
+    reason = None
     if not (path / ".git").exists():
-        raise RuntimeError(f"{path}: legacy file-copy source has no git history; preserved. "
-                           "Use --offline to sync it, or move it to a backup and rerun to clone upstream.")
-    if git(path, "status", "--porcelain"):
-        raise RuntimeError(f"{path}: local changes preserved; commit/stash them yourself before updating, "
-                           "or use --offline to sync the working tree")
+        reason = "legacy file-copy source has no git history"
+    elif git(path, "status", "--porcelain"):
+        reason = "source contains local changes"
+    if reason:
+        if use_local and not repair:
+            print(f"LOCAL {path.name}: using existing skills ({reason}); "
+                  "upstream refresh skipped, use --repair-sources for backup-first replacement")
+            return
+        if not repair:
+            raise RuntimeError(f"{path}: {reason}; preserved. Use --offline to sync the working copy, "
+                               "or --repair-sources to back it up and clone canonical upstream.")
+        if preview:
+            print(f"WOULD REPLACE {path}: {reason}; clone {upstream} first, then back up the entire source")
+            return
+        clone_source(path, upstream, replace=True)
+        return
     branch = git(path, "symbolic-ref", "--quiet", "--short", "HEAD")
     remote = git(path, "config", f"branch.{branch}.remote")
     ref = git(path, "config", f"branch.{branch}.merge")
@@ -190,6 +226,8 @@ def parser():
     result.add_argument("--uninstall", action="store_true", help="remove unchanged manifest-owned files only")
     result.add_argument("--repair-conflicts", action="store_true",
                         help="back up conflicting skill directories, then replace with selected sources; personal additions remain in backups")
+    result.add_argument("--repair-sources", action="store_true",
+                        help="clone canonical upstream before backing up and replacing legacy/dirty source trees")
     result.add_argument("--harness", action="append", choices=("claude", "codex", "openclaw", "pi", "copilot", "hermes", "omp"))
     for group in GROUPS:
         selection = result.add_mutually_exclusive_group()
@@ -207,6 +245,8 @@ def parser():
 
 def main(argv=None):
     args = parser().parse_args(argv)
+    if args.repair_sources and (args.offline or args.uninstall):
+        parser().error("--repair-sources requires online source updates, not --offline or --uninstall")
     args.preview = args.check or args.dry_run
     home = Path.home()
     cache = home / ".claude/skills-cache"
@@ -241,7 +281,7 @@ def main(argv=None):
                 print("WARNING bioSkills was archived upstream in August 2026; no upstream fixes are expected")
             checkout = home / relative
             try:
-                update_source(checkout, upstream, args.preview, args.offline)
+                update_source(checkout, upstream, args.preview, args.offline, args.repair_sources, args.install)
             except (OSError, RuntimeError) as exc:
                 print(f"ERROR {exc}", file=sys.stderr)
                 protected.add(source)

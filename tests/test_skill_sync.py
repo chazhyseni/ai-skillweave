@@ -44,7 +44,8 @@ class SkillSyncTests(unittest.TestCase):
         self.home = self.root / "home with spaces"
         self.home.mkdir()
         self.env = {**os.environ, "HOME": str(self.home), "PYTHONDONTWRITEBYTECODE": "1",
-                    "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull}
+                    "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+                    "GIT_ALLOW_PROTOCOL": "file"}
         self.env.pop("SKILLWEAVE_OMP_AGENT_DIR", None)
         for key in ("OMP_PROFILE", "PI_PROFILE", "PI_CONFIG_DIR", "PI_CODING_AGENT_DIR", "XDG_DATA_HOME"):
             self.env.pop(key, None)
@@ -284,6 +285,89 @@ class SkillSyncTests(unittest.TestCase):
         dirty.write_text("Local edit must survive")
         self.run_sync(*self.all_harnesses, expected=1)
         self.assertEqual(dirty.read_text(), "Local edit must survive")
+
+    def recovery_remote(self, remote):
+        config = self.home / ".gitconfig"
+        self.git(self.root, "config", "--file", str(config),
+                 f"url.{remote.as_uri()}.insteadOf", "https://github.com/affaan-m/ECC.git")
+        self.env["GIT_CONFIG_GLOBAL"] = str(config)
+
+    def test_install_uses_legacy_and_dirty_sources_without_overwriting_or_network(self):
+        self.skill(self.source, body="Legacy source content")
+        science = self.home / ".claude-scientific-skills"
+        self.make_source_repo("science-example", science)
+        self.skill(science / "skills", name="science-example", body="Personal science content")
+        before_legacy, before_dirty = snapshot(self.source.parent), snapshot(science)
+        self.run_sync("--install", "--harness", "omp")
+        delivered = self.home / HARNESSES["omp"]
+        self.assertIn("Legacy source content", (delivered / "example/SKILL.md").read_text())
+        self.assertIn("Personal science content", (delivered / "science-example/SKILL.md").read_text())
+        self.assertEqual(snapshot(self.source.parent), before_legacy)
+        self.assertEqual(snapshot(science), before_dirty)
+        self.assertFalse((self.home / "skillweave-source-backups").exists())
+
+    def test_source_snapshot_recovery_is_previewable_and_preserves_every_file(self):
+        self.make_source_repo("upstream", self.root / "pristine")
+        self.recovery_remote(self.root / "upstream.git")
+        self.skill(self.source, body="Personal snapshot")
+        (self.source.parent / "notes.txt").write_text("Personal source notes")
+        before = snapshot(self.source.parent)
+        home_before = snapshot(self.home)
+        self.run_sync("--repair-sources", "--dry-run", "--harness", "omp")
+        self.assertEqual(snapshot(self.home), home_before)
+        self.run_sync("--repair-sources", "--harness", "omp")
+        backups = list((self.home / "skillweave-source-backups").glob("*/*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(snapshot(backups[0]), before)
+        self.assertTrue((self.source.parent / ".git").is_dir())
+        self.assertTrue((self.home / HARNESSES["omp"] / "upstream/SKILL.md").is_file())
+        self.assertFalse((self.source.parent / "notes.txt").exists())
+        self.run_sync("--repair-sources", "--harness", "omp")
+        self.assertEqual(list((self.home / "skillweave-source-backups").glob("*/*")), backups)
+
+    def test_dirty_source_recovery_preserves_git_history_ignored_and_untracked_files(self):
+        shutil.rmtree(self.source.parent)
+        self.make_source_repo("upstream", self.source.parent)
+        self.recovery_remote(self.root / "upstream.git")
+        self.skill(self.source, name="upstream", body="Uncommitted personal change")
+        (self.source.parent / "notes.txt").write_text("Untracked personal notes")
+        (self.source.parent / ".git/info/exclude").write_text("ignored.txt\n")
+        (self.source.parent / "ignored.txt").write_text("Ignored personal notes")
+        before = snapshot(self.source.parent)
+        self.run_sync("--repair-sources", "--harness", "omp")
+        backup = next((self.home / "skillweave-source-backups").glob("*/*"))
+        self.assertEqual(snapshot(backup), before)
+        self.assertIn("measured evidence", (self.source / "upstream/SKILL.md").read_text())
+        self.assertIn("Uncommitted personal", (backup / "skills/upstream/SKILL.md").read_text())
+
+    def test_failed_source_clone_leaves_original_in_place_without_backup(self):
+        self.skill(self.source, body="Original snapshot")
+        before = snapshot(self.source.parent)
+        self.recovery_remote(self.root / "nonexistent.git")
+        self.run_sync("--repair-sources", "--harness", "omp", expected=1)
+        self.assertEqual(snapshot(self.source.parent), before)
+        self.assertFalse((self.home / "skillweave-source-backups").exists())
+        self.assertFalse(list(self.home.glob(".skillweave-clone-*")))
+
+    def test_source_repair_rejects_offline_uninstall_and_target_only_before_writes(self):
+        before = snapshot(self.home)
+        for args in (("--offline",), ("--uninstall",), ("--only", "omp")):
+            result = subprocess.run(["bash", str(REPO / "install.sh"), "--repair-sources", *args],
+                                    env=self.env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(snapshot(self.home), before)
+
+    def test_bionemo_uses_published_bundle_and_supports_older_layout(self):
+        checkout = self.home / ".claude-bionemo-skills"
+        bundle = checkout / "skills/bionemo-agent-toolkit/skills"
+        self.skill(checkout / "nim-skills", name="example", body="Original layout")
+        self.skill(bundle, name="example", body="Published bundle")
+        self.run_sync("--offline", "--without-ecc", "--harness", "omp")
+        delivered = self.home / HARNESSES["omp"] / "example/SKILL.md"
+        self.assertIn("Published bundle", delivered.read_text())
+        shutil.rmtree(bundle)
+        self.run_sync("--offline", "--without-ecc", "--harness", "omp")
+        self.assertIn("Original layout", delivered.read_text())
 
 
 if __name__ == "__main__":

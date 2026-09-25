@@ -2,7 +2,8 @@
 
 Manage portable Agent Skills across **Claude Code, Codex, OpenClaw, Pi, Copilot
 CLI, Hermes, and oh-my-pi**. Update selected upstream libraries and personal
-skills through one ownership-aware synchronizer.
+skills through one ownership-aware synchronizer. Optionally learn from corrections
+and session history, configure local models, and set up MCP integrations or Ruflo.
 
 **No Ollama subscription required.** Skill delivery works independently of model
 hosting. Local Ollama and llama.cpp are optional; existing model settings stay
@@ -43,6 +44,9 @@ Open a new Bash/Zsh shell afterward to load the helper aliases.
 |---|---|
 | `--skip-skills` | Skip skill delivery and shell integration |
 | `--offline` | No source fetches; initial Python dependency setup may still need network |
+| `--repair-sources` | Clone upstream first, then back up and replace legacy/dirty source trees |
+| `--repair-conflicts` | Back up differing destination skills before replacing them |
+| `--with-ruflo` | Also install/reuse the opt-in Ruflo CLI; no project initialization or MCP registration |
 | `--learn` | Opt in to learning dependencies and extraction; requires the skills layer |
 | `--no-learn` | Skip learning setup/extraction (default) |
 | `--verify` | Read-only diagnostics |
@@ -75,7 +79,20 @@ bash scripts/update-ecc.sh --without-bioskills   # persistently disable a source
 Despite its historical name, `update-ecc.sh` updates **all enabled sources**.
 Unchanged ECC content does not prevent other sources from updating.
 
-- Source updates require clean checkouts and fast-forward merges; no forced resets.
+Normal installation uses valid copied/locally modified sources without treating
+their Git state as an installation error. It reports skipped upstream refreshes;
+clean tracked sources still update. To migrate those sources explicitly:
+
+```bash
+bash scripts/update-ecc.sh --repair-sources --repair-conflicts --dry-run
+bash install.sh --only skills --repair-sources --repair-conflicts
+```
+
+The complete original sources remain in printed `skillweave-source-backups`
+locations; custom edits are not automatically merged into the new upstream
+copies. See [recovery and pip-index guidance](docs/TROUBLESHOOTING.md).
+
+- In-place source updates require clean checkouts and fast-forward merges; no forced resets.
 - Full skill directories propagate, including scripts, assets and executable modes.
 - Identity and source priority use the declared `name` in `SKILL.md`, as OMP does,
   not upstream folder names. This prevents duplicate-name shadowing.
@@ -138,16 +155,8 @@ automatically execute their scripts.
 visibility allowlist, hide skills, or inject the combined library into prompts.
 Keep all the skills you need installed and let the model select relevant bodies.
 
-There are three different costs:
-
-- **Catalog context:** names and concise descriptions stay in the prompt. They
-  can consume input tokens on successive requests; provider prompt caching may
-  discount billing or reduce prefill work, but does not remove their context.
-- **Description compression:** OMP caches generated descriptions by content.
-  Unchanged entries can reuse the cache; new/changed descriptions, another
-  profile, or a missing cache can trigger more compression work.
-- **Skill bodies:** read only when selected or explicitly autoloaded/invoked.
-  Read content then occupies conversation context until trimmed/compacted.
+Catalog metadata occupies context even when skill bodies are loaded on demand.
+Prompt caching may reduce repeated input costs, but does not remove that context.
 
 If a particular model cannot accommodate the full catalog, the following is an
 **optional** session restriction—not an installation requirement:
@@ -171,20 +180,6 @@ manually reachable while removing its advertised description, but the model
 then lacks that routing hint. Do not edit managed copies to set it: updates
 correctly treat those edits as conflicts.
 
-For the 608-skill integration sample, a reconstruction of OMP's cold-start
-100-character description previews counted **14,228 `o200k_base` / 14,820 Qwen
-tokens** using `omp toks`; the three-skill Python filter counted **71 / 75**.
-These are catalog-only measurements, not an exact live-session bill. Cached
-descriptions, model tokenizer and other prompt content change the total.
-Current upstream OMP can also use `smol`/`tiny` inference to compress uncached
-descriptions in the background. Review those model roles: local foreground
-inference alone does not guarantee no cloud calls or no charges.
-
-See OMP's [skill discovery behavior](https://github.com/can1357/oh-my-pi/blob/main/docs/skills.md)
-and [description compression implementation](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/extensibility/skill-descriptions.ts).
-Skillweave preserves your OMP visibility/model settings rather than silently
-disabling skills or selecting a paid compression model.
-
 ## Local inference
 
 ```bash
@@ -203,6 +198,17 @@ the catalog. These commands do not silently resize a running server.
 Model setup supports Pi, OMP, OpenClaw and current Codex. Ollama launch mappings
 are Ollama-only. Claude/Copilot skill delivery does not configure their provider
 APIs. See [model selection, sizing and server setup](docs/LOCAL-MODELS.md).
+
+### Next step: litMoE
+
+[litMoE](https://github.com/chazhyseni/litMoE) provides a local-model gateway
+with OpenAI- and Anthropic-compatible APIs, routing named models to llama.cpp
+or ktransformers. It adds hardware-aware model selection and engine lifecycle
+management; it is not itself an inference engine. Its
+[harness guide](https://github.com/chazhyseni/litMoE/blob/main/docs/HARNESSES.md)
+covers isolated Claude and Hermes launchers that leave normal provider settings
+unchanged. Skillweave supplies the skills; litMoE can supply the model-serving
+layer. Installation and model downloads remain separate and explicit.
 
 ## Optional learning
 
@@ -228,12 +234,67 @@ Aliases: `learn-sync`, `learn-sync-dry`, `learn-stats`, `learn-prune`,
 `skills-update`. Installed helpers live under `~/.claude/scripts/`.
 Claude learning hooks are opt-in; `--no-learn` does not remove older hooks.
 
+### Claude hooks
+
+`bash scripts/setup-hooks.sh` installs the search hooks. Opt in to local prompt
+capture with `bash scripts/setup-learning-hook.sh` (also enabled by the main
+installer's `--learn` path when Claude is selected).
+
+| Event | Behavior |
+|---|---|
+| `PreToolUse` (`Glob\|Grep`) | One reminder before broad searches in a Codesight-indexed project with a registered Codesight server |
+| `PostToolUse` (Codesight summary) | Suppress that reminder after a successful summary |
+| `UserPromptSubmit` (opt-in) | Save candidate corrections/preferences locally without echoing them into model context |
+| `SessionEnd` | Remove that session's search-reminder state |
+
+Hooks use Python's standard library: no inference, model downloads, or network
+requests. Codesight registration is not a health check; if the server is
+unavailable, retrying the search proceeds. Capture records live under
+`~/.claude/skills/learned/events/` with private file permissions. The normal
+learning pipeline reads them alongside history, deduplicates by session, and
+applies its existing evidence gates. A captured prompt is **not** automatically
+a trusted skill; session exit does not run extraction.
+
+Setup upgrades recognized managed hook copies, migrates repository-path
+registrations to installed copies, and preserves custom files and unrelated
+hooks. Claude's hook protocol is not installed into other harnesses; their
+session-history extraction remains separate. See the
+[Claude hook reference](https://code.claude.com/docs/en/hooks).
+
 ## Integrations and checks
 
 MCP setup preserves existing entries, skips missing local servers, and does not
 automatically enable remote endpoint templates. Local inference does not make
 remote MCP tools offline or credential-free. Beads setup is explicit
 (`--only beads`), not required for skills.
+
+### Optional Ruflo
+
+```bash
+bash install.sh --only ruflo       # Ruflo only; no skill sync or Python setup
+bash install.sh --with-ruflo       # Normal installation plus Ruflo
+bash install.sh --only ruflo --offline  # Reuse an existing installation, no npm download
+```
+
+An existing `ruflo` executable is preserved. Otherwise this installs the pinned
+`ruflo@3.45.0` and `@claude-flow/cli@3.45.0` packages under
+`~/.local/share/ai-skillweave/ruflo`, with a lockfile and a launcher in
+`~/.local/bin` if that path is free. Requires Node >=20 and npm; native optional
+dependencies may have additional platform/build requirements. No sudo or global
+npm install is used, and your project's package files are not changed.
+
+Add `~/.local/bin` to PATH if needed, then use `ruflo --version`.
+Project initialization is a separate decision: review `ruflo init --help` in the
+project you intend to configure. Skillweave does **not** run `init`, `doctor
+--fix`, start a daemon, register Ruflo MCP tools, or add its skill catalog.
+Installing the CLI therefore does not automatically increase harness prompt size
+or invoke a model. Existing Beads/harness targets still require their binaries
+to be installed separately. Skills uninstall leaves the optional Ruflo CLI intact.
+
+See [Ruflo upstream](https://github.com/ruvnet/ruflo) and its
+[published package requirements](https://registry.npmjs.org/ruflo/3.45.0).
+
+### Diagnostics
 
 Claude Desktop exports are separate snapshots: rebuild and re-import them after
 source changes. Personal instruction bundles and internal reports are not shipped.
@@ -248,14 +309,3 @@ pruning, user-edit preservation, legacy adoption, backup recovery, duplicate
 declared names, profile selection, read-only checks and no-LLM extraction.
 `--verify` checks files/configuration; `scripts/verify-omp.sh` additionally uses
 the installed native OMP loader. Neither certifies upstream scientific instructions.
-
-The 2026-09-25 audit started from remote commit `e0520a4`, not the stale local
-checkout. See the [dated upstream revision inventory](docs/SKILLS-CATALOG.md#upstream-audit--2026-09-25).
-
-Verification on Linux: 14 behavior regressions passed; a fresh isolated install
-from ECC, Hugging Face, K-Dense, ClawBio, Anthropic and OpenAI delivered 608 skills.
-A legacy fixture built from those skills produced 608 conflicts; explicit repair
-resolved them with all 608 personal additions retained in backups. OMP v18.3.1
-then read and content-verified every repaired skill. Installed-runtime offline
-sync and filesystem diagnostics also passed. The Mac's reported 2,227 errors
-were not rerun here; run the documented native verifier on that machine.

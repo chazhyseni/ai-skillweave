@@ -6,7 +6,7 @@ error() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 usage() {
     cat <<'HELP'
 Usage: bash install.sh [OPTIONS]
-  --only TARGET       skills|claude|copilot|codex|pi|omp|openclaw|hermes|ollama|beads
+  --only TARGET       skills|claude|copilot|codex|pi|omp|openclaw|hermes|ollama|beads|ruflo
                       Without --only: skills plus already installed harnesses.
   --skip-skills       Do not fetch skills or change shell integration
   --with-science / --without-science     Select scientific skills
@@ -20,6 +20,8 @@ Usage: bash install.sh [OPTIONS]
   --no-llm            Regex-only extraction when --learn is selected
   --offline          Propagate existing checkouts without fetching
   --repair-conflicts Back up conflicting skill copies before replacing them
+  --repair-sources   Back up legacy/dirty source trees and clone canonical upstream
+  --with-ruflo       Also install/reuse the optional user-local Ruflo CLI
   --backend NAME      Opt in to ollama or llama.cpp model configuration
   --model MODEL       Model ID/server alias (implies ollama unless --backend set)
   --base-url URL      Backend URL; loopback by default
@@ -29,11 +31,11 @@ Usage: bash install.sh [OPTIONS]
   --verify           Run diagnostics only
   --help, -h         Show help
 No system/global packages, harness binaries, models or subscriptions are installed.
-Install chosen harnesses yourself. Existing model choices are preserved by default.
+Install chosen harnesses yourself. --only ruflo / --with-ruflo opts into user-local npm packages.
 Skills require git and Python 3 with venv/pip; dependencies use ~/.claude/skillweave-venv.
 HELP
 }
-ONLY=""; SKIP_SKILLS=false; LEARN=false; ACTION=install
+ONLY=""; SKIP_SKILLS=false; LEARN=false; ACTION=install; RUFLO=false
 SKILL_ARGS=(); MODEL_ARGS=(); BACKEND=""; MODEL_REQUESTED=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -54,22 +56,34 @@ while [ "$#" -gt 0 ]; do
             esac
             shift 2 ;;
         --allow-remote) export SKILLWEAVE_LLM_ALLOW_REMOTE=1; MODEL_ARGS+=("$1"); MODEL_REQUESTED=true; shift ;;
-        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--offline|--no-llm|--repair-conflicts)
+        --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--offline|--no-llm|--repair-conflicts|--repair-sources)
             SKILL_ARGS+=("$1"); shift ;;
         --learn) LEARN=true; shift ;;
         --no-learn) LEARN=false; shift ;;
         --skip-skills) SKIP_SKILLS=true; shift ;;
+        --with-ruflo) RUFLO=true; shift ;;
         --uninstall|--verify) [ "$ACTION" = install ] || error 'Choose only one action'; ACTION="${1#--}"; shift ;;
         --help|-h) usage; exit 0 ;;
         *) error "Unknown option: $1 (see --help)" ;;
     esac
 done
-case "$ONLY" in ''|skills|claude|copilot|codex|pi|omp|openclaw|hermes|ollama|beads) ;; *) error "Unknown target: $ONLY" ;; esac
+case "$ONLY" in ''|skills|claude|copilot|codex|pi|omp|openclaw|hermes|ollama|beads|ruflo) ;; *) error "Unknown target: $ONLY" ;; esac
 case "$BACKEND" in ''|ollama|llama.cpp) ;; *) error "Unknown backend: $BACKEND" ;; esac
+if [[ " ${SKILL_ARGS[*]} " == *" --repair-sources "* ]]; then
+    [ "$ACTION" = install ] || error '--repair-sources is only valid during installation.'
+    ! $SKIP_SKILLS && { [ -z "$ONLY" ] || [ "$ONLY" = skills ]; } || error '--repair-sources requires the skills layer (use --only skills).'
+    [[ " ${SKILL_ARGS[*]} " != *" --offline "* ]] || error '--repair-sources cannot be combined with --offline.'
+fi
 if [ "$ACTION" = uninstall ]; then exec bash "$REPO_DIR/safe-install.sh" --uninstall; fi
 if [ "$ACTION" = verify ]; then exec bash "$REPO_DIR/scripts/verify.sh"; fi
 if $LEARN && { $SKIP_SKILLS || { [ -n "$ONLY" ] && [ "$ONLY" != skills ]; }; }; then
     error '--learn requires the skills layer (use --only skills --learn, without --skip-skills).'
+fi
+RUFLO_ARGS=()
+if [[ " ${SKILL_ARGS[*]} " == *" --offline "* ]]; then RUFLO_ARGS+=(--offline); fi
+if [ "$ONLY" = ruflo ]; then
+    ! $MODEL_REQUESTED || error '--only ruflo does not configure a model.'
+    exec bash "$REPO_DIR/scripts/setup-ruflo.sh" "${RUFLO_ARGS[@]}"
 fi
 command -v python3 >/dev/null 2>&1 || error 'Python 3 is required; install it with your package manager.'
 # Validate backend options before any installation side effects.
@@ -104,7 +118,13 @@ if [ -n "$ONLY" ] && ! $SKIP_SKILLS; then
 fi
 if selected claude; then
     require_harness claude
-    bash "$REPO_DIR/scripts/setup-mcp.sh"
+    if [ -f "$HOME/.claude.json" ]; then
+        bash "$REPO_DIR/scripts/setup-mcp.sh"
+    elif [ "$ONLY" = claude ]; then
+        error 'Run Claude Code once to initialize ~/.claude.json, then retry --only claude.'
+    else
+        printf 'Claude MCP setup skipped: run Claude Code once, then use --only claude.\n'
+    fi
     bash "$REPO_DIR/scripts/setup-claude-md.sh"
     bash "$REPO_DIR/scripts/setup-hooks.sh"
     if $LEARN; then bash "$REPO_DIR/scripts/setup-learning-hook.sh"; fi
@@ -134,4 +154,5 @@ if [ "$ONLY" = ollama ]; then
 fi
 # Beads is opt-in: never initialize the repository during the default install.
 if [ "$ONLY" = beads ]; then bash "$REPO_DIR/scripts/setup-beads.sh" --skip-init; fi
+if $RUFLO; then bash "$REPO_DIR/scripts/setup-ruflo.sh" "${RUFLO_ARGS[@]}"; fi
 printf 'Setup complete. Open a new shell to activate skills aliases. Run bash install.sh --verify for diagnostics.\n'

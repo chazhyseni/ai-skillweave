@@ -96,6 +96,32 @@ persist; source checkouts are not deleted when disabled.
 training collection. [Microsoft skills](https://github.com/microsoft/skills)
 are useful selectively for Azure/Foundry projects, but are not bundled here.
 
+## Archived bioSkills and alternatives
+
+Keep bioSkills as an **optional reference library**, not an actively maintained
+dependency. Its [maintainers explicitly stopped updates and fixes](https://github.com/GPTomics/bioSkills#readme)
+but encourage customization. Existing selection is preserved; disabling it is
+not an automatic installation step. Pin tool/environment versions for
+reproducibility and validate commands, database APIs and scientific guidance
+against current primary documentation before use.
+
+The reviewed collections below are outside Skillweave's current source registry:
+
+| Collection | Assessment |
+|---|---|
+| [AWS HCLS agent skills](https://github.com/awslabs/hcls-agent-skills) | Strongest maintained complement reviewed: genomics QC, variant calling, RNA-seq, single-cell and healthcare workflows; MIT-0. Recent skill changes are visible in its [history](https://github.com/awslabs/hcls-agent-skills/commits/main/skills). Its coverage does not replace bioSkills' broader assembly, metagenomics, epigenomics and specialized workflows. AWS-specific skills need separate services/credentials. |
+| [OpenAI life-science research](https://github.com/openai/plugins/tree/main/plugins/life-science-research) | A separate collection from the configured `openai/skills` source. Useful for database/API research, entity resolution and evidence synthesis; not a replacement for local analysis pipelines. Check the plugin's own history, not just activity elsewhere in the parent repository. |
+| [St Jude CAB-aiSkills](https://github.com/stjudecab/CAB-aiSkills) | Focused executable skills for genomic regions, enrichment, plots and reporting. A complement, not a broad replacement; CC BY-NC-SA licensing needs review for commercial use and redistribution. |
+
+**Decision:** retain bioSkills rather than silently trade away coverage. These
+alternatives are not automatically enabled or represented as scientifically
+validated replacements. The AWS collection's skill payloads and native OMP
+discovery were checked; its biological workflows and cloud services were not run.
+
+The [genomics skills directory](https://github.com/GoekeLab/awesome-genomic-skills)
+is useful for further discovery, but is a link collection, not an installable
+replacement. Hosted MCP graphs are also not equivalent to a local skill library.
+
 ## Delivery and dependencies
 
 The synchronizer selects maintained skill roots rather than whole-repository

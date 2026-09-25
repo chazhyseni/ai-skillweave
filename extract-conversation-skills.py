@@ -582,10 +582,11 @@ class Ingestion:
             content = self._extract_user_messages(conv)
             if not content:
                 continue
-            # Derive project and session from file path
+            # Captured prompts and native transcripts share one session identity.
             fpath = conv.get("path", Path(""))
-            project = self._derive_project(fpath, harness)
-            session_id = fpath.stem if hasattr(fpath, 'stem') else ""
+            data = conv.get("data", {})
+            project = data.get("cwd") or self._derive_project(fpath, harness)
+            session_id = data.get("sessionId") or (fpath.stem if hasattr(fpath, 'stem') else "")
             utterances = re.split(r"(?<=[.!?])\s+|\n{2,}", content)
 
             # Multi-turn detection: buffer recent utterances with scores
@@ -1821,6 +1822,9 @@ class Pipeline:
                 if p.exists():
                     sources.append(("claude", p))
                     break
+            captured = Path.home() / ".claude/skills/learned/events"
+            if captured.is_dir():
+                sources.append(("claude", captured))
         if harness in ("codex", "all"):
             for p in CODEX_HISTORY_PATHS:
                 if p.exists():

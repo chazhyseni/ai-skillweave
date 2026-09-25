@@ -33,11 +33,9 @@ hardware-conscious shortlists, not measured quality rankings. Avoid `latest`
 in reproducible setups: installed aliases can refer to a different model size.
 Select a specific local tag, not `:cloud`, and verify `ollama show TAG`.
 
-**Size context for the complete prompt, not just the question.** The 608-skill
-catalog alone measured roughly 14–15K OpenAI/Qwen tokens before tools, system
-instructions, conversation and output. A 16K context is therefore unsuitable for
-that full-library agent session. Keep all needed skills available; provision a
-model/server with sufficient usable context instead of silently dropping skills.
+**Size context for the complete prompt, not just the question:** skill metadata,
+system instructions, tools, history and generated output all need space. Keep
+needed skills available and provision sufficient usable context for the workload.
 
 The examples below use **64K context and one server slot** for a full-library
 setup; this is a sizing example, not a measured fit guarantee. Account for KV
@@ -113,6 +111,12 @@ remains simpler when sharing one endpoint across harnesses.
 | Codex | `skillweave-local.config.toml` profile; **Codex 0.134.0+ and `/v1/responses` required** |
 | Ollama launch | Ollama-only mappings, not a llama.cpp transport |
 
+Native `ollama launch` integrations can write harness configuration or start
+services; they are not necessarily per-process model overrides. Use an isolated
+home/profile when testing. For a separate llama.cpp/ktransformers gateway with
+isolated Claude and Hermes launchers, see
+[litMoE's harness guide](https://github.com/chazhyseni/litMoE/blob/main/docs/HARNESSES.md).
+
 Select Codex with `codex --profile skillweave-local`. The separate
 [profile](https://learn.chatgpt.com/docs/config-file/config-advanced#profiles)
 keeps existing config/trust intact and uses workspace-write/on-request, not
@@ -145,12 +149,3 @@ with supporting assets. Repeat at realistic context size, recording memory,
 latency and tool success. The optional Hugging Face source provides model
 selection, weight-sizing and evaluation skills; none certifies scientific or
 clinical correctness.
-
-## Verification scope
-
-A real CPU llama-server using the already-installed Ornith 9B GGUF returned
-`LOCAL_INFERENCE_OK` through `ModelBackend.complete` with a 4096-token context,
-512-token output limit and thinking disabled. This verifies the actual
-`/v1/chat/completions` transport, not agentic tool accuracy or macOS performance.
-No weights were downloaded for that check. Repeat the tool/context checks above
-on the destination hardware before selecting a production model.
