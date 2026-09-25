@@ -1,0 +1,4 @@
+# Skill frontmatter parsing; installed only in the dedicated skillweave venv.
+PyYAML>=6.0.2,<7
+# Read existing OpenClaw JSON5 without rewriting it as invalid JSON.
+json5>=0.9,<1

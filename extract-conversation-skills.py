@@ -33,6 +33,8 @@ Options:
 """
 
 import os
+import sys
+sys.dont_write_bytecode = True
 # Prevent huggingface tokenizers from enabling parallelism before fork,
 # which causes deadlock warnings and slowdowns when subprocess is used.
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -49,119 +51,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple, Optional
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from model_backend import BackendError, ModelBackend, add_backend_arguments, backend_from_args
 
 
-# =============================================================================
-# Dependency auto-install
-# =============================================================================
-
-def _ensure_deps(verbose: bool = False):
-    """Ensure scikit-learn, numpy, and requests are available.
-
-    sentence-transformers is intentionally NOT checked here — importing it
-    can crash the Python process on abseil-cpp/pyarrow version
-    conflicts (SIGABRT, not catchable via except Exception). It is imported
-    lazily inside _cluster_by_similarity with a try/except that falls back
-    to Jaccard clustering if unavailable.
-
-    Strategy:
-    1. Check if already installed (skip if available)
-    2. Prefer repo's .venv if it exists (re-exec with venv python)
-    3. Create/use ~/.claude/.venv for learning pipeline deps (isolated, PEP 668-safe)
-    """
-    import subprocess, sys
-    
-    # Check if already installed (might be running from venv)
-    try:
-        import sklearn
-        import numpy
-        import requests
-        if verbose:
-            print(f"  [DEPS] Already available: scikit-learn={sklearn.__version__}, numpy={numpy.__version__}, requests={requests.__version__}")
-        return True
-    except ImportError:
-        pass
-    
-    # Prefer repo's .venv if it exists (ai-skillweave or parent dir)
-    script_dir = Path(__file__).parent
-    for venv_rel in [".venv", "../.venv", "../../.venv"]:
-        venv_python = (script_dir / venv_rel / "bin" / "python").resolve()
-        if venv_python.exists():
-            try:
-                result = subprocess.run(
-                    [str(venv_python), "-c", "import sklearn, numpy, requests; print('OK')"],
-                    capture_output=True, text=True, timeout=10
-                )
-                if result.returncode == 0:
-                    if verbose:
-                        print(f"  [DEPS] Using venv: {venv_python}")
-                    # Re-run this script with the venv python
-                    os.execv(str(venv_python), [str(venv_python), __file__] + sys.argv[1:])
-            except Exception:
-                pass
-    
-    # Create/use ~/.claude/.venv for learning pipeline (isolated from system Python)
-    home = Path.home()
-    learn_venv = home / ".claude" / ".venv"
-    learn_venv_python = learn_venv / "bin" / "python"
-    
-    if not learn_venv_python.exists():
-        if verbose:
-            print(f"  [DEPS] Creating learning venv: {learn_venv}")
-        uv_path = shutil.which("uv")
-        if uv_path:
-            result = subprocess.run(
-                [uv_path, "venv", str(learn_venv)],
-                capture_output=True, text=True, timeout=60
-            )
-            if result.returncode != 0 and verbose:
-                print(f"  [DEPS] venv creation warning: {result.stderr[:100]}")
-    
-    if learn_venv_python.exists():
-        # Install deps into the venv (including requests for batch HTTP)
-        uv_path = shutil.which("uv")
-        if uv_path:
-            result = subprocess.run(
-                [uv_path, "pip", "install", "--quiet", "scikit-learn>=1.5.0", "numpy>=1.26.0", "requests>=2.28.0"],
-                capture_output=True, text=True, timeout=120,
-                env={**os.environ, "VIRTUAL_ENV": str(learn_venv)}
-            )
-            if result.returncode == 0:
-                if verbose:
-                    print(f"  [DEPS] Installed to {learn_venv} via uv")
-                # Re-run this script with the venv python
-                os.execv(str(learn_venv_python), [str(learn_venv_python), __file__] + sys.argv[1:])
-            elif verbose:
-                print(f"  [DEPS] uv install failed: {result.stderr[:200]}")
-    
-    # Final fallback: try pip with --user (may fail on PEP 668 systems)
-    required = {
-        "scikit-learn": "scikit-learn>=1.5.0",
-        "numpy": "numpy>=1.26.0",
-        "requests": "requests>=2.28.0",
-    }
-    missing = []
-    for module, pkg in required.items():
-        try:
-            __import__(module.replace("-", "_"))
-        except ImportError:
-            missing.append(pkg)
-    
-    if missing:
-        if verbose:
-            print(f"  [DEPS] Installing via pip: {', '.join(missing)}...")
-        in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
-        cmd = [sys.executable, "-m", "pip", "install", "--quiet"] + missing
-        if not in_venv:
-            cmd.append("--user")
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"  [WARN] Failed to auto-install dependencies: {result.stderr[:200]}")
-            print(f"  [WARN] Please run: python3 -m pip install --user {' '.join(missing)}")
-            return False
-        if verbose:
-            print(f"  [DEPS] Installed: {', '.join(missing)}")
-    return True
 
 
 # =============================================================================
@@ -183,14 +75,6 @@ PI_HISTORY_PATHS = [
 DEFAULT_OUTPUT_DIR = Path.home() / ".claude" / "skills" / "learned"
 USAGE_FILE = DEFAULT_OUTPUT_DIR / ".usage.json"
 
-# Model routing hierarchy: try in order until one works
-MODEL_PRIORITY = [
-    # Timeouts bumped because qwen3.6 is a thinking model: even with
-    # think:false and num_predict=4096, a 8-group batch takes 30-60s.
-    # 240s was tight and caused cascading fallback to single-call mode.
-    {"name": "ollama-local", "type": "ollama", "model": "qwen3.6:latest", "timeout": 600},  # Local qwen3.6 (primary — 23GB, already pulled)
-    {"name": "ollama-cloud", "type": "ollama", "model": "qwen3.5:cloud", "timeout": 300},   # Cloud fallback
-]
 
 # Pipeline thresholds (ALMA-inspired)
 MIN_OCCURRENCES = 3
@@ -207,107 +91,6 @@ MEMORY_TYPES = ["heuristic", "anti_pattern", "preference", "domain_knowledge"]
 GENERALIZABLE_TYPES = {"heuristic", "anti_pattern"}
 
 
-def _try_get_completion(prompt: str, timeout: int = 60, verbose: bool = False, session=None) -> Optional[str]:
-    """Try to get completion from models in priority order. Returns first successful response.
-    
-    Tries standard Ollama HTTP API first (reliable, fast), then falls back to subprocess.
-    If session is provided (requests.Session), uses it for connection pooling.
-    """
-    import subprocess
-    
-    for model_config in MODEL_PRIORITY:
-        model_name = model_config["name"]
-        model_type = model_config["type"]
-        model_id = model_config["model"]
-        model_timeout = model_config["timeout"]
-        
-        if verbose:
-            print(f"  [LLM-TRY] {model_name} ({model_id})...")
-        
-        try:
-            if model_type == "ollama":
-                # --- PRIMARY: Standard Ollama HTTP API ---
-                try:
-                    if session is not None:
-                        # Use requests with connection pooling (faster for batched calls)
-                        resp = session.post(
-                            "http://localhost:11434/api/generate",
-                            json={
-                                "model": model_id,
-                                "prompt": prompt,
-                                "stream": False,
-                                # Disable chain-of-thought. qwen3.6 is a thinking
-                                # model that spends 200-1000 tokens on internal
-                                # reasoning before any visible response, which
-                                # exhausted num_predict=1024 and produced empty
-                                # responses. With think:false the full budget
-                                # goes to actual JSON output.
-                                "think": False,
-                                "options": {
-                                    "temperature": 0.3,
-                                    # 4096 fits a full 8-group batch (8 × ~280
-                                    # chars of JSON = ~2,240 chars output, plus
-                                    # some prompt-echo overhead). 1024 was too
-                                    # small even with think disabled.
-                                    "num_predict": 4096,
-                                },
-                            },
-                            timeout=min(timeout, model_timeout)
-                        )
-                        resp.raise_for_status()
-                        data = resp.json()
-                        response_text = data.get("response", "").strip()
-                    else:
-                        # Fallback to urllib (no session)
-                        import urllib.request
-                        import urllib.error
-                        req = urllib.request.Request(
-                            "http://localhost:11434/api/generate",
-                            data=json.dumps({
-                                "model": model_id,
-                                "prompt": prompt,
-                                "stream": False,
-                                "think": False,
-                                "options": {"temperature": 0.3, "num_predict": 4096}
-                            }).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
-                            method="POST"
-                        )
-                        with urllib.request.urlopen(req, timeout=min(timeout, model_timeout)) as resp:
-                            data = json.loads(resp.read().decode("utf-8"))
-                            response_text = data.get("response", "").strip()
-                    
-                    if response_text:
-                        if verbose:
-                            print(f"  [LLM-OK] {model_name} returned {len(response_text)} chars")
-                        return response_text
-                except Exception as e:
-                    if verbose:
-                        print(f"  [LLM-FALLBACK] HTTP API unavailable ({type(e).__name__}), trying subprocess...")
-                
-                # --- FALLBACK: Subprocess via ollama run ---
-                result = subprocess.run(
-                    ["ollama", "run", model_id, prompt],
-                    capture_output=True, text=True, timeout=min(timeout, model_timeout),
-                    stdin=subprocess.DEVNULL,
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    if verbose:
-                        print(f"  [LLM-OK] {model_name} (subprocess) returned {len(result.stdout)} chars")
-                    return result.stdout.strip()
-                elif verbose:
-                    print(f"  [LLM-FAIL] {model_name}: {result.stderr[:100] if result.stderr else 'empty output'}")
-        
-        except subprocess.TimeoutExpired:
-            if verbose:
-                print(f"  [LLM-TIMEOUT] {model_name} after {model_timeout}s")
-        except Exception as e:
-            if verbose:
-                print(f"  [LLM-ERROR] {model_name}: {type(e).__name__}")
-    
-    if verbose:
-        print(f"  [LLM-ALL-FAIL] All models failed")
-    return None
 
 # Regex markers per memory type
 # Frustration/escalation signals — strong evidence this is a real correction
@@ -510,10 +293,10 @@ class UsageRecord:
 # =============================================================================
 
 class Ingestion:
-    def __init__(self, verbose: bool = False, use_llm: bool = False, llm_model: str = "qwen3.6:latest"):
+    def __init__(self, verbose: bool = False, use_llm: bool = False, backend: ModelBackend = None):
         self.verbose = verbose
         self.use_llm = use_llm
-        self.llm_model = llm_model
+        self.backend = backend or ModelBackend()
         self.compiled_markers = {
             mtype: [re.compile(p, re.IGNORECASE) for p in patterns]
             for mtype, patterns in CLASSIFICATION_MARKERS.items()
@@ -529,8 +312,8 @@ class Ingestion:
             re.compile(r'\b(you\'re missing|you missed|you forgot)\b', re.IGNORECASE),
         ]
 
-    _LLM_CHUNK_SIZE = 150   # utterances per single LLM call
-    _LLM_WORKERS = 4        # parallel chunks (Ollama queues extras gracefully)
+    _LLM_CHUNK_SIZE = 50    # Keep prompts within modest local context budgets.
+    _LLM_WORKERS = 1        # Avoid multiplying KV-cache memory on local machines.
 
     def _llm_classify_batch(self, utterances: List[str]) -> Dict[str, Optional[str]]:
         """Batch-classify ALL borderline utterances via parallel chunked LLM calls.
@@ -544,7 +327,7 @@ class Ingestion:
 
         unique = list(dict.fromkeys(utterances))
         total_chunks = (len(unique) + self._LLM_CHUNK_SIZE - 1) // self._LLM_CHUNK_SIZE
-        print(f"  [LLM-CLASSIFY] {len(unique)} utterances → {total_chunks} chunks (size={self._LLM_CHUNK_SIZE}, workers={self._LLM_WORKERS}) via {self.llm_model}")
+        print(f"  [LLM-CLASSIFY] {len(unique)} utterances → {total_chunks} chunks via {self.backend.backend}/{self.backend.model}")
 
         def _classify_chunk(args):
             chunk_i, chunk = args
@@ -559,21 +342,19 @@ class Ingestion:
                 "Example for 3 messages: none,anti_pattern,heuristic\nLabels:"
             )
             try:
-                response = _try_get_completion(prompt, timeout=120, verbose=False)
-                if not response:
-                    return chunk_i, {}
+                response = self.backend.complete(prompt, verbose=self.verbose)
                 response = response.strip().strip("`").strip()
                 labels = [lbl.strip().lower() for lbl in response.split(",")]
+                if len(labels) != len(chunk) or any(label not in ("anti_pattern", "heuristic", "none") for label in labels):
+                    raise BackendError("Classification response has invalid labels/count; choose a more capable model")
                 chunk_result = {}
                 for j, utt in enumerate(chunk):
                     if j < len(labels):
                         lbl = labels[j]
                         chunk_result[utt] = lbl if lbl in ("anti_pattern", "heuristic") else None
                 return chunk_i, chunk_result
-            except Exception as e:
-                if self.verbose:
-                    print(f"  [LLM-CLASSIFY] Chunk {chunk_i+1}/{total_chunks} failed ({type(e).__name__}), skipping")
-                return chunk_i, {}
+            except BackendError:
+                raise
 
         chunks = [
             (i, unique[s:s + self._LLM_CHUNK_SIZE])
@@ -1017,9 +798,10 @@ class Ingestion:
 # =============================================================================
 
 class Learning:
-    def __init__(self, verbose: bool = False, min_occurrences: int = MIN_OCCURRENCES):
+    def __init__(self, verbose: bool = False, min_occurrences: int = MIN_OCCURRENCES, use_embeddings: bool = False):
         self.verbose = verbose
         self.min_occurrences = min_occurrences
+        self.use_embeddings = use_embeddings
 
     def group_corrections(self, corrections: List[RawCorrection]) -> List[PatternGroup]:
         by_type: Dict[str, List[RawCorrection]] = defaultdict(list)
@@ -1072,12 +854,14 @@ class Learning:
         run the ENTIRE embedding pipeline in a subprocess so the parent survives
         any C++ library crashes and falls back to Jaccard.
         """
-        import subprocess, sys, tempfile, json, os
+        if not self.use_embeddings:
+            return self._cluster_by_keywords(corrections, threshold)
+        import subprocess, sys
         
         if self.verbose:
             print(f"  [CLUSTER] Attempting embedding-based clustering for {len(corrections)} corrections...")
         
-        # Build a temp script that does the embedding + clustering in isolation
+        # Isolate native embedding dependencies without downloading models.
         texts = [c.raw_text for c in corrections]
         script = '''
 import sys, json
@@ -1085,15 +869,15 @@ from sentence_transformers import SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
 import numpy as np
 
-texts = json.loads(sys.argv[1])
-threshold = float(sys.argv[2])
-verbose = sys.argv[3] == "1"
+texts = json.load(sys.stdin)
+threshold = float(sys.argv[1])
+verbose = sys.argv[2] == "1"
 
 if len(texts) == 1:
     print(json.dumps([[0]]))
     sys.exit(0)
 
-encoder = SentenceTransformer('all-MiniLM-L6-v2')
+encoder = SentenceTransformer('all-MiniLM-L6-v2', local_files_only=True)
 embeddings = encoder.encode(texts, show_progress_bar=False)
 
 norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
@@ -1123,15 +907,11 @@ if verbose:
 print(json.dumps(clusters))
 '''
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(script)
-                tmp_script = f.name
-            
             result = subprocess.run(
-                [sys.executable, tmp_script, json.dumps(texts), str(threshold), "1" if self.verbose else "0"],
-                capture_output=True, text=True, timeout=120
+                [sys.executable, "-c", script, str(threshold), "1" if self.verbose else "0"],
+                input=json.dumps(texts), capture_output=True, text=True, timeout=120,
+                env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "PYTHONDONTWRITEBYTECODE": "1"},
             )
-            os.unlink(tmp_script)
             
             if result.returncode == 0:
                 cluster_indices = json.loads(result.stdout.strip())
@@ -1150,15 +930,11 @@ print(json.dumps(clusters))
         except Exception as e:
             if self.verbose:
                 print(f"  [CLUSTER] Embedding subprocess error ({type(e).__name__}): {e}")
-        finally:
-            try:
-                os.unlink(tmp_script)
-            except Exception:
-                pass
         
-        # Fallback: Jaccard word overlap
-        if self.verbose:
-            print(f"  [CLUSTER] Using Jaccard fallback")
+        return self._cluster_by_keywords(corrections, threshold)
+
+    def _cluster_by_keywords(self, corrections: List[RawCorrection], threshold: float) -> List[List[RawCorrection]]:
+        """Group by lexical overlap without loading a model or contacting a server."""
         clusters: List[List[RawCorrection]] = []
         used = set()
         for i, c1 in enumerate(corrections):
@@ -1188,10 +964,10 @@ print(json.dumps(clusters))
 # =============================================================================
 
 class Consolidation:
-    def __init__(self, verbose: bool = False, use_llm: bool = False, llm_model: str = None):
+    def __init__(self, verbose: bool = False, use_llm: bool = False, backend: ModelBackend = None):
         self.verbose = verbose
         self.use_llm = use_llm
-        self.llm_model = llm_model or "qwen3.5:cloud"  # Default, but routing will try all models
+        self.backend = backend or ModelBackend()
         self.project_specific_re = [re.compile(p) for p in PROJECT_SPECIFIC_PATTERNS]
 
     def deduplicate(self, groups: List[PatternGroup]) -> List[PatternGroup]:
@@ -1220,26 +996,32 @@ class Consolidation:
             merged.append(current)
         return merged
 
-    def abstract_group(self, group: PatternGroup) -> PatternGroup:
-        """LLM-only abstraction. No templates, no keywords."""
-        distilled = self._llm_distill(group)
-        if distilled:
-            if len(distilled) == 4:
-                group.condition, group.strategy, group.anti_pattern, group.short_name = distilled
-            else:
-                group.condition, group.strategy, group.anti_pattern = distilled[:3]
+    def abstract_without_llm(self, group: PatternGroup, min_occurrences: int) -> PatternGroup:
+        """Retain repeated explicit conditional instructions; never invent an abstraction."""
+        candidates = {}
+        for correction in group.corrections:
+            text = " ".join(correction.raw_text.split())
+            match = re.fullmatch(r"((?:When|If)\s+[^,]+),\s*(.+[.!?])", text, re.IGNORECASE)
+            if not match:
+                continue
+            condition, strategy = match.groups()
+            if not re.match(r"(?:always|never|do not|avoid|ensure|verify|prefer|use|check|keep|run|test|review|preserve|document)\b", strategy, re.IGNORECASE):
+                continue
+            condition = condition.rstrip(".!?") + "."
+            if not self._validate_complete(condition, "condition") or not self._validate_complete(strategy, "strategy"):
+                continue
+            key = (condition.casefold(), strategy.casefold())
+            candidate = candidates.setdefault(key, [condition, strategy, set()])
+            candidate[2].add(correction.session_id)
+        supported = [item for item in candidates.values() if len(item[2]) >= min_occurrences]
+        if supported:
+            condition, strategy, _ = max(supported, key=lambda item: len(item[2]))
+            group.condition = condition
+            group.strategy = strategy
+            group.short_name = SkillWriter._slugify_strategy(strategy)
             group.scope = self._determine_scope(group)
-            return group
-        # If LLM fails, mark as unabstracted so downstream rejects
-        group.condition = ""
-        group.strategy = ""
         return group
 
-    def _llm_distill(self, group: PatternGroup) -> Optional[Tuple[str, str, str]]:
-        """LLM-only abstraction via single-pass distillation."""
-        if not self.use_llm:
-            return None
-        return self._llm_distill_single(group)
 
     def _validate_complete(self, text: str, field_name: str) -> bool:
         """Validate that a field is complete (not truncated)."""
@@ -1301,11 +1083,7 @@ Rules:
 - No markdown, no quotes, just plain text"""
 
         try:
-            # Use model routing hierarchy instead of hardcoded ollama
-            output = _try_get_completion(prompt, timeout=90, verbose=self.verbose)
-            
-            if not output:
-                return None
+            output = self.backend.complete(prompt, verbose=self.verbose)
             
             # Strip ANSI escape codes
             ansi_re = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
@@ -1331,12 +1109,12 @@ Rules:
                 if not cond_ok:
                     if self.verbose:
                         print(f"  [SINGLE-FAIL] condition truncated: {condition[:50]}...")
-                    return None
+                    raise BackendError("Distillation produced an incomplete condition; choose a more capable model")
                 
                 if not strat_ok:
                     if self.verbose:
                         print(f"  [SINGLE-FAIL] strategy truncated: {strategy[:50]}...")
-                    return None
+                    raise BackendError("Distillation produced an incomplete strategy; choose a more capable model")
                 
                 if anti_pattern and not anti_ok:
                     if self.verbose:
@@ -1349,40 +1127,19 @@ Rules:
                 if self.verbose:
                     print(f"  [SINGLE-OK] validated")
                 return (condition, strategy, anti_pattern, short_name)
-        except Exception:
-            pass
-        return None
+        except BackendError:
+            raise
+        raise BackendError("Distillation returned no condition/strategy; choose a more capable model")
     
-    def _llm_distill_batch(self, groups: List[PatternGroup], batch_size: int = 8) -> List[PatternGroup]:
-        """Distill multiple groups in a single LLM call.
-
-        Sends batch_size groups in one prompt, gets JSON array back.
-        20-30x speedup vs individual calls.
-
-        Default batch_size is 8 (not 20) because the local model
-        (qwen3.6:latest) is a thinking model — even with `think: false`
-        the response for 20 groups runs ~5,000 chars and often truncates
-        mid-JSON. With batch_size=8 the response fits in num_predict=4096
-        and JSON parses reliably. Throughput per batch drops 2.5x but
-        reliability goes from ~10% to ~95% on thinking models.
-
-        Throughput math (qwen3.6 23GB local, 8-batch, 16 workers):
-          - 670 groups / 8 = 84 batches
-          - 84 / 16 workers = ~5-6 batches per worker
-          - ~40s per batch × 6 = ~4 minutes total
-        vs individual: 670 × 30s = 5.6 hours
-        """
+    def _llm_distill_batch(self, groups: List[PatternGroup], batch_size: int = 4) -> List[PatternGroup]:
+        """Distill small batches sequentially to bound local inference memory."""
         if not groups:
             return []
         
         # Split into batches
         batches = [groups[i:i+batch_size] for i in range(0, len(groups), batch_size)]
         results = []
-        lock = __import__('threading').Lock()
         
-        # HTTP session for connection pooling (import requests lazily)
-        import requests
-        session = requests.Session()
         
         def _process_batch(batch: List[PatternGroup], batch_idx: int) -> List[PatternGroup]:
             """Process one batch of groups."""
@@ -1425,12 +1182,7 @@ Rules:
 - No markdown, just valid JSON"""
 
             try:
-                output = _try_get_completion(prompt, timeout=180, verbose=self.verbose, session=session)
-                if not output:
-                    if self.verbose:
-                        print(f"  [BATCH-{batch_idx}] Failed to get completion")
-                    # Fall back to individual processing for this batch
-                    return [self._llm_distill_single(g) for g in batch]
+                output = self.backend.complete(prompt, verbose=self.verbose)
                 
                 # Parse JSON response
                 try:
@@ -1444,7 +1196,7 @@ Rules:
                     # it just not valid JSON at all? Each points to a
                     # different fix.
                     if not output:
-                        reason = "empty response from Ollama"
+                        reason = "empty response from model"
                     elif not output.strip().startswith('[') and not output.strip().startswith('{'):
                         reason = f"response is not JSON (starts with: {output.strip()[:60]!r})"
                     elif output.count('[') != output.count(']') or output.count('{') != output.count('}'):
@@ -1482,7 +1234,7 @@ Rules:
                             g.condition = condition
                             g.strategy = strategy
                             g.anti_pattern = anti_pattern
-                            g.short_name = short_name.lower().replace(" ", "-") if short_name else self._slugify_strategy(strategy)
+                            g.short_name = short_name.lower().replace(" ", "-") if short_name else SkillWriter._slugify_strategy(strategy)
                             g.scope = self._determine_scope(g)
                             batch_results.append(g)
                         else:
@@ -1504,6 +1256,8 @@ Rules:
                 
                 return batch_results
                 
+            except BackendError:
+                raise
             except Exception as e:
                 if self.verbose:
                     print(f"  [BATCH-{batch_idx}] Exception: {e}, falling back to individual")
@@ -1518,50 +1272,10 @@ Rules:
                         g.scope = self._determine_scope(g)
                 return list(batch)
         
-        # Process batches in parallel
-        max_workers = min(16, (len(batches) + 1) // 2)  # More workers for batches
-        start_time = time.time()
-        
-        # Log the overall plan so the user sees throughput math
-        if self.verbose:
-            est_per_batch = 40 if batch_size == 8 else 30
-            est_total = (len(batches) / max_workers) * est_per_batch
-            print(f"  Processing {len(batches)} batches (batch_size={batch_size}, workers={max_workers}, est ~{est_total:.0f}s total)...")
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_batch = {executor.submit(_process_batch, batch, idx): (batch, idx) for idx, batch in enumerate(batches)}
-            completed_batches = 0
-            # Per-batch-start log so user sees work happening (each batch
-            # can take 30-60s on a thinking model; without this, the
-            # log is silent for long stretches).
-            for future in as_completed(future_to_batch):
-                batch, batch_idx = future_to_batch[future]
-                try:
-                    batch_results = future.result()
-                    with lock:
-                        # Filter out None in case any fallback returned it
-                        for r in batch_results:
-                            if r is not None:
-                                results.append(r)
-                            else:
-                                # Mark its condition/strategy as empty so
-                                # downstream quality gates reject it
-                                pass
-                        completed_batches += 1
-                        elapsed = time.time() - start_time
-                        if self.verbose or completed_batches % 4 == 0:
-                            print(f"  [BATCH] {completed_batches}/{len(batches)} batches done ({len(results)}/{len(groups)} groups abstracted, {elapsed:.1f}s elapsed)")
-                except Exception as e:
-                    if self.verbose:
-                        print(f"  [BATCH-{batch_idx}] Failed: {e}")
-                    # Add unprocessed groups with empty abstraction (will be rejected downstream)
-                    with lock:
-                        for g in batch:
-                            g.condition = ""
-                            g.strategy = ""
-                        results.extend(batch)
-        
-        session.close()
+        for batch_idx, batch in enumerate(batches):
+            results.extend(_process_batch(batch, batch_idx))
+            if self.verbose:
+                print(f"  [BATCH] {batch_idx + 1}/{len(batches)} batches done")
         return results
 
     def is_generalizable(self, group: PatternGroup) -> bool:
@@ -1916,20 +1630,21 @@ class FeedbackTracker:
 
 class Pipeline:
     def __init__(self, output_dir: Path = DEFAULT_OUTPUT_DIR, dry_run: bool = False,
-                 verbose: bool = False, use_llm: bool = False, llm_model: str = "qwen3.6:latest",
-                 min_occurrences: int = MIN_OCCURRENCES, incremental: bool = False):
+                 verbose: bool = False, use_llm: bool = False, backend: ModelBackend = None,
+                 min_occurrences: int = MIN_OCCURRENCES, incremental: bool = False, input_dir: Path = None):
         self.output_dir = output_dir
         self.dry_run = dry_run
         self.verbose = verbose
         self.use_llm = use_llm
-        self.llm_model = llm_model
+        self.backend = backend or ModelBackend()
+        self.input_dir = input_dir
         self.min_occurrences = min_occurrences
         self.incremental = incremental
-        self.ingestion = Ingestion(verbose=verbose, use_llm=use_llm, llm_model=llm_model)
-        self.learning = Learning(verbose=verbose, min_occurrences=min_occurrences)
-        self.consolidation = Consolidation(verbose=verbose, use_llm=use_llm, llm_model=llm_model)
+        self.ingestion = Ingestion(verbose=verbose, use_llm=use_llm, backend=self.backend)
+        self.learning = Learning(verbose=verbose, min_occurrences=min_occurrences, use_embeddings=use_llm)
+        self.consolidation = Consolidation(verbose=verbose, use_llm=use_llm, backend=self.backend)
         self.writer = SkillWriter(output_dir, dry_run=dry_run, verbose=verbose)
-        self.feedback = FeedbackTracker(verbose=verbose)
+        self.feedback = FeedbackTracker(usage_file=output_dir / ".usage.json", verbose=verbose)
 
     @staticmethod
     def _dedup_within_sessions(corrections: List[RawCorrection]) -> List[RawCorrection]:
@@ -2001,25 +1716,19 @@ class Pipeline:
         passing = self.learning.apply_thresholds(groups)
         print(f"Stage 2: {len(passing)}/{len(groups)} groups pass thresholds (freq≥{self.min_occurrences}, conf≥{MIN_CONFIDENCE})")
 
-        # Stage 3: Consolidation (LLM-only abstraction)
+        # Stage 3: Consolidation
         if self.verbose:
             print("\n=== Stage 3: Consolidation ===")
         deduped = self.consolidation.deduplicate(passing)
         if self.verbose:
             print(f"  After dedup: {len(deduped)} groups")
 
-        # Abstract every group via LLM distillation (batched + parallel)
-        if deduped:
-            # Batch sizing: 8 groups per batch fits comfortably in num_predict=4096
-            # for thinking models. 16 workers (matching Ollama's parallel-load
-            # tolerance) means 670 groups → 84 batches → ~6 batches per worker.
-            # Each batch takes 30-60s; total wall clock ~3-5 minutes.
-            batch_size = 8
-            max_workers = 16
-            print(f"\n  Abstracting {len(deduped)} groups via LLM distillation (batched: {batch_size}/batch, {max_workers} workers)...")
-            abstracted = self.consolidation._llm_distill_batch(deduped, batch_size=batch_size)
-            # Replace deduped list with abstracted results
-            deduped = abstracted
+        if deduped and self.use_llm:
+            batch_size = 4
+            print(f"\n  Abstracting {len(deduped)} groups via {self.backend.backend} ({batch_size}/batch, 1 worker)...")
+            deduped = self.consolidation._llm_distill_batch(deduped, batch_size=batch_size)
+        elif deduped:
+            deduped = [self.consolidation.abstract_without_llm(group, self.min_occurrences) for group in deduped]
 
         skills_to_write = []
         rejected = 0
@@ -2074,9 +1783,9 @@ class Pipeline:
         if self.verbose and reject_reasons:
             print(f"  Rejection reasons: {dict(reject_reasons)}")
         if self.use_llm:
-            print(f"  LLM distillation active ({'cloud' if 'cloud' in (self.consolidation.llm_model or '') else 'local'})")
+            print(f"  LLM distillation: {self.backend.backend}/{self.backend.model} at {self.backend.base_url}")
         else:
-            print(f"  [WARN] --llm not enabled; all skills will be rejected (LLM is required in v3)")
+            print("  No-LLM extraction: retaining repeated explicit conditional instructions only.")
 
         # Stage 4: Output
         if self.verbose:
@@ -2084,12 +1793,9 @@ class Pipeline:
         written = self.writer.write_skills(skills_to_write)
         print(f"Stage 4: {len(written)} SKILL.md files written")
 
-        # Update usage tracking
-        for skill_file in self.output_dir.glob("*.md"):
-            if skill_file.name.startswith(".") or skill_file.name == "SKILL.md":
-                continue
-            self.feedback.record_load(skill_file.stem)
-        self.feedback.save()
+        if not self.dry_run:
+            # Extraction is not evidence that a skill was loaded by a harness.
+            self.feedback.save()
 
         # Save corrections cache and timestamp for incremental extraction
         if self.incremental and not self.dry_run:
@@ -2106,6 +1812,8 @@ class Pipeline:
         }
 
     def _find_input_sources(self, harness: str) -> List[Tuple[str, Path]]:
+        if self.input_dir is not None:
+            return [(harness if harness != "all" else "claude", self.input_dir)]
         sources = []
         if harness in ("claude", "all"):
             for p in CLAUDE_HISTORY_PATHS:
@@ -2249,10 +1957,13 @@ def main():
     parser.add_argument("--harness", choices=["claude", "codex", "openclaw", "pi", "all"], default="all")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
-    parser.add_argument("--llm", action="store_true",
-                        help="Use local Ollama model for distillation (falls back to keyword-based if unavailable)")
-    parser.add_argument("--llm-model", default="qwen3.6:latest",
-                        help="Ollama model for LLM distillation and Stage 1 classification (default: qwen3.6:latest)")
+    llm_mode = parser.add_mutually_exclusive_group()
+    llm_mode.add_argument("--llm", action="store_true",
+                          help="Use the configured model for classification and distillation")
+    llm_mode.add_argument("--no-llm", action="store_false", dest="llm",
+                          help="Use keyword grouping and explicit user rules only; never call a model (default)")
+    parser.set_defaults(llm=False)
+    add_backend_arguments(parser, prefix="llm-")
     parser.add_argument("--min-occurrences", type=int, default=MIN_OCCURRENCES,
                         help=f"Minimum unique sessions to form a skill (default: {MIN_OCCURRENCES})")
     parser.add_argument("--stats", action="store_true",
@@ -2264,21 +1975,9 @@ def main():
 
     args = parser.parse_args()
     
-    # Auto-install dependencies and auto-enable LLM if Ollama is available
-    _ensure_deps(verbose=args.verbose)
-    
-    if not args.llm:
-        # Check if Ollama is available
-        import shutil
-        if shutil.which("ollama"):
-            args.llm = True
-            print("  [INFO] Ollama detected; auto-enabling --llm (LLM distillation required)")
-        else:
-            print("  [WARN] Ollama not found; pipeline will produce 0 skills (LLM distillation required)")
-            print("         Install Ollama or run with --llm if using a different LLM backend")
 
     if args.stats:
-        feedback = FeedbackTracker(verbose=args.verbose)
+        feedback = FeedbackTracker(usage_file=args.output / ".usage.json", verbose=args.verbose)
         stats = feedback.stats()
         if not stats:
             print("No usage data found.")
@@ -2291,12 +1990,19 @@ def main():
         return 0
 
     if args.prune:
-        feedback = FeedbackTracker(verbose=args.verbose)
+        feedback = FeedbackTracker(usage_file=args.output / ".usage.json", verbose=args.verbose)
         archived = feedback.prune_skills(args.output, dry_run=args.dry_run)
         if not args.dry_run:
             feedback.save()
         print(f"Archived {len(archived)} decayed skills")
         return 0
+
+    try:
+        backend = backend_from_args(args) if args.llm else ModelBackend()
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.input is not None and not args.input.exists():
+        parser.error(f"Input does not exist: {args.input}")
 
     print("\n╔══════════════════════════════════════════════════════════╗")
     print("║   Skills Extractor — ALMA-Inspired Pipeline          ║")
@@ -2307,9 +2013,14 @@ def main():
     print(f"  Min occurrences: {min_occ} | Min confidence: {MIN_CONFIDENCE}")
 
     pipeline = Pipeline(output_dir=args.output, dry_run=args.dry_run, verbose=args.verbose,
-                        use_llm=args.llm, llm_model=args.llm_model, min_occurrences=min_occ,
-                        incremental=args.incremental)
-    results = pipeline.run(harness=args.harness)
+                        use_llm=args.llm, backend=backend, min_occurrences=min_occ,
+                        incremental=args.incremental, input_dir=args.input)
+    try:
+        results = pipeline.run(harness=args.harness)
+    except BackendError as exc:
+        import sys
+        print(f"Extraction failed: {exc}", file=sys.stderr)
+        return 1
 
     print("\n" + "=" * 60)
     print("Pipeline Summary")
@@ -2325,4 +2036,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

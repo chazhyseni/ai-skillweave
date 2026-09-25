@@ -6,6 +6,10 @@ set -e
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 HOOK_PATH="$REPO_DIR/hooks/learning-capture.sh"
+command -v python3 >/dev/null 2>&1 || { echo 'Python 3 is required.' >&2; exit 1; }
+if [ "$#" -gt 0 ]; then
+  case "$1" in --help|-h) echo 'Usage: setup-learning-hook.sh'; exit 0 ;; *) echo "Unknown option: $1" >&2; exit 1 ;; esac
+fi
 
 if [ ! -f "$SETTINGS_FILE" ]; then
   echo "[WARN] Claude Code settings not found: $SETTINGS_FILE"
@@ -18,37 +22,25 @@ if [ ! -f "$HOOK_PATH" ]; then
   exit 1
 fi
 
-python3 << PYEOF
-import json
+python3 - "$HOOK_PATH" <<'PYEOF'
+import json, shlex, sys
 from pathlib import Path
 
 settings_file = Path.home() / ".claude" / "settings.json"
-hook_path = "$HOOK_PATH"
+hook_path = shlex.quote(sys.argv[1])
 
 try:
     with open(settings_file) as f:
         settings = json.load(f)
     
-    # Validate and fix malformed hooks structure
-    if "hooks" not in settings:
-        settings["hooks"] = {}
-    
-    for hook_type in list(settings["hooks"].keys()):
-        entries = settings["hooks"][hook_type]
-        if not isinstance(entries, list):
-            settings["hooks"][hook_type] = []
-            continue
-        cleaned = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            if "hooks" not in entry or not isinstance(entry["hooks"], list):
-                entry["hooks"] = []
-            cleaned.append(entry)
-        settings["hooks"][hook_type] = cleaned
-    
-    if "UserPromptSubmit" not in settings["hooks"]:
-        settings["hooks"]["UserPromptSubmit"] = []
+    # Preserve unrelated hooks and reject malformed structures without rewriting.
+    settings.setdefault("hooks", {})
+    if not isinstance(settings["hooks"], dict):
+        raise ValueError("Existing hooks must be an object")
+    settings["hooks"].setdefault("UserPromptSubmit", [])
+    entries = settings["hooks"]["UserPromptSubmit"]
+    if not isinstance(entries, list) or any(not isinstance(e, dict) or not isinstance(e.get("hooks"), list) for e in entries):
+        raise ValueError("Existing UserPromptSubmit hooks are malformed")
     
     # Add learning capture hook if not already present
     hook_exists = any(

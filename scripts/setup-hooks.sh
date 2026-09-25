@@ -25,57 +25,48 @@ log()     { echo -e "${BLUE}[HOOKS]${NC} $1"; }
 success() { echo -e "${GREEN}[OK]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
-# Install hook script
+command -v python3 >/dev/null 2>&1 || { echo 'Python 3 is required.' >&2; exit 1; }
+if [ "$#" -gt 0 ]; then
+    case "$1" in --help|-h) echo 'Usage: setup-hooks.sh'; exit 0 ;; *) echo "Unknown option: $1" >&2; exit 1 ;; esac
+fi
 mkdir -p "$HOOKS_DIR"
-cp "$HOOK_SRC" "$HOOK_DEST"
-chmod +x "$HOOK_DEST"
-success "Hook installed: $HOOK_DEST"
+if [ -e "$HOOK_DEST" ] && ! cmp -s "$HOOK_SRC" "$HOOK_DEST"; then
+    warn "Preserving existing hook: $HOOK_DEST (review manually to update)"
+else
+    cp "$HOOK_SRC" "$HOOK_DEST"
+    chmod +x "$HOOK_DEST"
+fi
 
 # Register in settings.json
 if [ ! -f "$SETTINGS_FILE" ]; then
     echo '{}' > "$SETTINGS_FILE"
 fi
 
-python3 << PYEOF
-import json
+python3 - "$SETTINGS_FILE" "$HOOK_DEST" <<'PYEOF'
+import json, shlex, sys
 
-settings_path = "$SETTINGS_FILE"
-hook_path = "$HOOK_DEST"
+settings_path = sys.argv[1]
+hook_path = sys.argv[2]
 
 with open(settings_path) as f:
     settings = json.load(f)
 
-# Validate and fix malformed hooks structure
-if "hooks" not in settings:
-    settings["hooks"] = {}
-
-# Fix any hook category that is not a list or contains entries without a "hooks" array
-for hook_type in list(settings["hooks"].keys()):
-    entries = settings["hooks"][hook_type]
-    if not isinstance(entries, list):
-        settings["hooks"][hook_type] = []
-        continue
-    cleaned = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        if "hooks" not in entry or not isinstance(entry["hooks"], list):
-            # Fix malformed entry by adding empty hooks array
-            entry["hooks"] = []
-        cleaned.append(entry)
-    settings["hooks"][hook_type] = cleaned
+# Reject malformed settings rather than erasing unrelated user hooks.
+settings.setdefault("hooks", {})
+if not isinstance(settings["hooks"], dict):
+    raise SystemExit("Existing hooks must be an object; configuration unchanged.")
+pre = settings["hooks"].get("PreToolUse", [])
+if not isinstance(pre, list) or any(not isinstance(h, dict) or not isinstance(h.get("hooks"), list) for h in pre):
+    raise SystemExit("Existing PreToolUse hooks are malformed; configuration unchanged.")
 
 hook_entry = {
     "matcher": "Glob|Grep",
-    "hooks": [{"type": "command", "command": hook_path}]
+    "hooks": [{"type": "command", "command": shlex.quote(hook_path)}]
 }
 
-pre = settings["hooks"].get("PreToolUse", [])
-# Remove stale codesight-redirect entries (idempotent)
-pre = [h for h in pre if not any(
-    hook.get("command", "").endswith("codesight-redirect.sh")
-    for hook in h.get("hooks", [])
-)]
+if any(h.get("command") in (hook_path, shlex.quote(hook_path)) for entry in pre for h in entry["hooks"]):
+    print("Existing codesight hook preserved")
+    sys.exit(0)
 pre.append(hook_entry)
 settings["hooks"]["PreToolUse"] = pre
 

@@ -1,102 +1,86 @@
 # Troubleshooting
 
-## "context limit reached" on every Claude Code session
+## Python has no `activate`
 
-**Cause:** An old install injected `combined-skills.txt` (~7 MB ≈ 1.8M tokens) as a system prompt. Claude's context window is 200K tokens — a 9× overflow.
-
-**Fix:** Re-run the installer to replace the old wrapper with the lean-skills version:
-
-```bash
-./install.sh --only skills
-source ~/.zshrc   # or ~/.bashrc
-```
-
-The new wrapper injects only `lean-skills.txt` (~13 KB ≈ 3K tokens — the top 50 personal learned skills by confidence). The full skill library loads natively from `~/.claude/skills/` via Claude Code's built-in `/skills` feature.
-
----
-
-## Ollama model "works" but Claude hits context limit
-
-Ollama silently truncates prompts to its `num_ctx` limit — no error, skills silently dropped. Claude Code uses the Anthropic API directly, which returns an explicit `context_length_exceeded` error when the system prompt is too large. This is by design — the fix is to use `lean-skills.txt`.
-
----
-
-## Skills not appearing in Copilot CLI
-
-Copilot CLI bridges the cross-harness skill pool via `scripts/setup-copilot-skills.sh`. The bridge installs:
-  - A symlink `~/.copilot/config/skills -> ~/.claude/skills` (native Copilot path)
-  - The env-var `COPILOT_SKILLS_DIRS=~/.claude/skills:~/.pi/agent/skills` in your shell rc
-  - An updated `_copilot_with_skills()` wrapper that sets the env-var inline as a fallback
-
-If no skills appear in Copilot:
-
-1. **Check the bridge is installed:** `scripts/setup-copilot-skills.sh --check` — all three checks should pass.
-2. **Verify skills are installed:** `find -L ~/.claude/skills -name SKILL.md | wc -l` (3,000+ on a full install; the library ships 2,652 unique skills).
-3. **Re-run the skills install:** `./install.sh --only skills` then re-run `scripts/setup-copilot-skills.sh`.
-4. **Reload your shell** so the env-var export takes effect: `source ~/.bashrc` (or `~/.zshrc`).
-5. **Restart Copilot** so it re-discovers skills on launch.
-
-To disable a specific skill: add its name to `disabledSkills` in `~/.copilot/settings.json`.
-
-To add extra skill directories beyond what the bridge provides: set `COPILOT_SKILLS_DIRS=/path/to/skills` in your shell rc (the bridge will use this in place of the default if set).
-
-To remove the bridge entirely: `scripts/setup-copilot-skills.sh --unlink`.
-
----
-
-## MCP server fails to start
+A uv-managed interpreter is not a virtualenv. Let the installer create
+`~/.claude/skillweave-venv`, or use:
 
 ```bash
-# Check which MCP servers are configured
-cat ~/.claude.json | python3 -m json.tool | grep -A5 mcpServers
-
-# Re-apply MCP config
-scripts/setup-mcp.sh --force
-
-# Verify all servers
-./install.sh --verify
+uv venv --python 3.13 .venv
+source .venv/bin/activate
 ```
 
----
+Install your platform's venv/pip support if needed. Do not use `sudo pip` or
+`--break-system-packages`. Learning dependencies are opt-in with `--learn`.
 
-## beads `bd` command not found
+## Source updates or managed files conflict
+
+The updater never resets dirty checkouts or replaces edited/unmanaged skills.
+A conflict returns nonzero: compare the named files, preserve your changes,
+then merge or move them aside deliberately before retrying.
+
+For old copied sources without `.git`, `--offline` continues delivering the
+snapshot. Back up/move the reported checkout before recloning. Old name-only
+manifests cannot prove file ownership; migration preserves ambiguous copies.
+`--no-prune` postpones removal while retaining ownership for a later run.
+
+bioSkills is archived. Disable it with `--without-bioskills` if you do not want
+that reference snapshot.
+
+## Skills are missing after sync
 
 ```bash
-scripts/setup-beads.sh
-# or manually:
-uv tool install beads-mcp    # installs both bd and beads-mcp
+bash scripts/update-ecc.sh --offline --dry-run
+bash scripts/update-ecc.sh --offline
+bash install.sh --verify
 ```
 
----
+Restart/reload the harness, then inspect its skill list. Check
+[the native paths](../README.md#native-harness-paths), disabled/provider settings,
+and context warnings. Current Codex uses `.agents/skills`; OMP does not use Pi's
+skill directory. Use `--harness NAME` to explicitly create a new target.
 
-## Proxy / Zscaler intercepting Ollama streams
+Set `SKILLWEAVE_OMP_AGENT_DIR` for a custom OMP agent directory, and align custom
+OpenClaw workspaces manually. OMP needs the `read` tool available to advertise
+skills; `--no-tools` omits its skill index. Filesystem diagnostics alone do not
+prove runtime discovery or invocation.
+
+Old Copilot `COPILOT_SKILLS_DIRS` exports/wrappers may cause duplicate discovery.
+Review obsolete entries manually; current setup uses `.copilot/skills`. Never
+delete a symlink's target while removing an old bridge.
+
+## Local model fails or runs out of context
 
 ```bash
-scripts/disable-zscaler.sh         # disable proxy
-scripts/disable-zscaler.sh --tray  # also kill tray agent
+curl --fail http://127.0.0.1:11434/api/tags  # Ollama
+curl --fail http://127.0.0.1:8080/health    # llama.cpp
+curl --fail http://127.0.0.1:8080/v1/models
 ```
 
-Add `NO_PROXY=localhost,127.0.0.1` to your shell rc to bypass proxy for local Ollama.
+Check the exact tag/alias, server version, chat template, output limit and
+context allocation. Ollama takes a root URL; llama.cpp takes `/v1`. Codex needs
+Responses API support, not just chat completions. See [LOCAL-MODELS.md](LOCAL-MODELS.md).
 
----
+Do not inject `combined-skills.txt` as a system prompt. Reduce sources/tools
+before increasing context; advertised maximum context is not available RAM.
+Empty, incomplete or truncated extraction responses are errors, not reasons to
+silently send histories to the cloud.
 
-## Shell aliases not working after install
+## MCP server or runtime helper unavailable
 
-```bash
-source ~/.zshrc    # macOS
-source ~/.bashrc   # Linux/WSL
+MCP setup skips missing executables and does not auto-enable remote templates.
+Google Docs needs a separately installed/authenticated server. Use the upstream
+instructions, then run `bash scripts/setup-mcp.sh` and `claude mcp list`.
+A config entry does not prove a working connection. Malformed existing JSON is
+preserved; repair it rather than replacing it with an empty config.
 
-# Verify the wrapper is installed
-grep "_claude_with_skills" ~/.zshrc || grep "_claude_with_skills" ~/.bashrc
-```
+Edited/unmanaged helpers in `~/.claude/scripts` are also preserved. Compare or
+back up the named file before retrying. Keep its `scripts/` and `configs/`
+hierarchy intact. Scientific tools, `bip`, Beads and other skill dependencies
+must be installed separately; `beads-mcp` does not install the Go `bd` CLI.
 
----
+## Proxy or enterprise TLS
 
-## Re-running install.sh after a previous install
-
-Safe to re-run at any time. The installer:
-
-- Removes the old shell wrapper block before writing the new one (idempotent)
-- Skips existing git clones (use `--force` to re-clone)
-- Merges MCP servers (doesn't overwrite existing entries unless `--force` is passed to setup-mcp.sh)
-- Rebuilds the skills cache from the current state of `~/.claude/skills/`
+Installation does not disable Zscaler or alter security agents/proxies. Use your
+organization's approved CA/proxy settings. Local extraction bypasses proxy
+variables; other harnesses may need an approved loopback `NO_PROXY` setting.

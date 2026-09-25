@@ -16,6 +16,11 @@ shared-learning/sync.log
 # Beads workspace (stealth mode — local context only, not committed)
 .beads/
 
+
+# Local agent notes, environments, and generated personal instruction bundles
+.remember/
+.venv/
+configs/claude-desktop-project-instructions.md
 # macOS
 .DS_Store
 .AppleDouble

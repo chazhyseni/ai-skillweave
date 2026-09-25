@@ -1,77 +1,9 @@
-
-# =============================================================================
-# Skills Layer — Everything Claude Code
-# =============================================================================
-# All harness commands get the ECC skills injected automatically.
-# Injected by: ai-skillweave/install.sh
-# To remove:   ai-skillweave/safe-install.sh --uninstall
-# =============================================================================
-
-# Claude Code: inject personal learned skills as system prompt supplement.
-# Uses lean-skills.txt (~personal skills only, ~1-2K tokens) NOT combined-skills.txt
-# (~1.4M tokens which would exceed Claude's 200K context window and crash the session).
-# The full ~900 skill library is already natively available via Claude Code's /skills
-# command from ~/.claude/skills/ — no injection needed for those.
-_claude_with_skills() {
-    local _skills_file="/tmp/claude-skills-$$.txt"
-    cat ~/.claude/skills-cache/lean-skills.txt > "$_skills_file" 2>/dev/null
-    if [ -s "$_skills_file" ]; then
-        (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command claude --append-system-prompt-file "$_skills_file" "$@")
-    else
-        (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command claude "$@")
-    fi
-    rm -f "$_skills_file"
-}
-
-# OpenClaw: loads SKILL.md files natively from ~/.openclaw/workspace/skills/
-_openclaw_with_skills() {
-    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command openclaw "$@")
-}
-
-# Codex: loads skills natively from ~/.codex/skills/ (ECC skills symlinked there)
-_codex_with_skills() {
-    (unset SKILLS_CONTENT OPENCLAW_SYSTEM_PROMPT; command codex "$@")
-}
-
-# Ollama: pass-through with env cleanup (openclaw/codex/pi load skills natively)
-_ollama_with_skills() {
-    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT OLLAMA_SYSTEM_FILE; command ollama "$@")
-}
-
-# Pi: loads skills natively from ~/.pi/agent/skills/
-_pi_with_skills() {
-    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT; command pi "$@")
-}
-
-# Copilot CLI: bridges the cross-harness skill pool via setup-copilot-skills.sh.
-# Without the bridge, Copilot only sees skills in ~/.claude/skills/ (read as
-# "personal-claude"). With the bridge installed, Copilot also finds skills
-# via ~/.copilot/config/skills (symlinked to ~/.claude/skills) and via
-# COPILOT_SKILLS_DIRS, which the wrapper below populates as a fallback if
-# the env-var wasn't set by the shell rc.
-# The bridge also handles Pi skills (auto-discovery) for full coverage.
-_copilot_with_skills() {
-    (unset SKILLS_CONTENT CODEX_SYSTEM_PROMPT OPENCLAW_SYSTEM_PROMPT
-     if [ -z "${COPILOT_SKILLS_DIRS:-}" ]; then
-         local _dirs=""
-         [ -d "$HOME/.claude/skills" ] && _dirs="$HOME/.claude/skills"
-         [ -d "$HOME/.pi/agent/skills" ] && _dirs="${_dirs:+$_dirs:}$HOME/.pi/agent/skills"
-         [ -n "$_dirs" ] && export COPILOT_SKILLS_DIRS="$_dirs"
-     fi
-     command copilot "$@")
-}
-
-# Cross-harness skill learner
-alias learn-sync='bash ~/.claude/scripts/sync-learned-skills.sh'
-alias learn-sync-dry='bash ~/.claude/scripts/sync-learned-skills.sh --dry-run'
-alias learn-stats='bash ~/.claude/scripts/sync-learned-skills.sh --stats'
-alias learn-prune='bash ~/.claude/scripts/sync-learned-skills.sh --prune'
-
-# Wrapper aliases
-alias claude='_claude_with_skills'
-alias openclaw='_openclaw_with_skills'
-alias codex='_codex_with_skills'
-alias ollama='_ollama_with_skills'
-alias pi='_pi_with_skills'
-alias copilot='_copilot_with_skills'
+# Skills Layer — ai-skillweave
+# Native skills are discovered by each harness; do not override user command aliases.
+# Learning commands use the installed runtime and its isolated Python environment.
+alias learn-sync='bash "$HOME/.claude/scripts/sync-learned-skills.sh"'
+alias learn-sync-dry='bash "$HOME/.claude/scripts/sync-learned-skills.sh" --dry-run'
+alias learn-stats='bash "$HOME/.claude/scripts/sync-learned-skills.sh" --stats'
+alias learn-prune='bash "$HOME/.claude/scripts/sync-learned-skills.sh" --prune'
+alias skills-update='bash "$HOME/.claude/scripts/scripts/update-ecc.sh"'
 # End Skills Layer

@@ -58,10 +58,10 @@
   },
 
   "_api_key_servers_commented": {
-    "_note": "Uncomment + fill in API keys, then re-run setup-mcp.sh",
+    "_note": "Optional examples only: install the server, supply credentials, and add deliberately. Never commit real tokens.",
     "github": {
-      "command": "{{NPX_PATH}}",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "command": "github-mcp-server",
+      "args": ["stdio"],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_PAT_HERE"
       }

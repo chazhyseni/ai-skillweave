@@ -34,7 +34,10 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 LEARNED_DIR="$HOME/.claude/skills/learned"
 AGENTS_DIR="$HOME/.claude-everything-claude-code/agents"
 COMMANDS_DIR="$HOME/.claude-everything-claude-code/commands"
-SCIENCE_DIR="$HOME/.claude-scientific-skills/scientific-skills"
+SCIENCE_DIR="$HOME/.claude-scientific-skills/skills"
+if [ ! -d "$SCIENCE_DIR" ]; then
+    SCIENCE_DIR="$HOME/.claude-scientific-skills/scientific-skills"
+fi
 ECC_SKILLS_DIR="$HOME/.claude-everything-claude-code/skills"
 
 TIER="full"
