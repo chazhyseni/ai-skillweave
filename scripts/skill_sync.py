@@ -39,6 +39,8 @@ SOURCES = (
     ("bipartite", ".claude-bipartite", "matsen/bipartite", ("skills",)),
     ("ecc", ".claude-everything-claude-code", "affaan-m/ECC", ("skills",)),
 )
+RESEARCH_SOURCES = {"aws-hcls", "openai-life-sciences", "stjude-cab"}
+DEFAULT_SOURCES = {"ecc", *RESEARCH_SOURCES}
 HF_SKILLS = {"hf-cli", "hf-mem", "huggingface-local-models", "huggingface-community-evals", "huggingface-datasets"}
 GROUPS = {"curated": ("anthropic", "codex-curated")}
 GROUPS.update({name: (name,) for name in ("ecc", "science", "bio", "bioskills", "huggingface")})
@@ -280,6 +282,11 @@ def main(argv=None):
     cache = home / ".claude/skills-cache"
     preferences = load_json(cache / "source-preferences.json", {})
     enabled = preferences.setdefault("enabled", {})
+    # Earlier installs persisted implicit disabled defaults as if they were choices.
+    # Apply the new research defaults once, before honoring explicit CLI opt-outs.
+    if not preferences.get("research_defaults"):
+        enabled.update({source: True for source in RESEARCH_SOURCES})
+        preferences["research_defaults"] = True
     for group, ids in GROUPS.items():
         if getattr(args, group) is not None:
             for source in ids:
@@ -288,7 +295,7 @@ def main(argv=None):
     enabled.update({source: False for source in args.without_source})
     if args.bioskills_categories is not None:
         preferences["bioskills_categories"] = [part.strip() for part in args.bioskills_categories.split(",") if part.strip()]
-    active = {source: enabled.get(source, source == "ecc" or (home / relative).exists())
+    active = {source: enabled.get(source, source in DEFAULT_SOURCES or (home / relative).exists())
               for source, relative, _, _ in SOURCES}
     if args.list_sources:
         for source, relative, upstream, _ in SOURCES:
@@ -307,6 +314,8 @@ def main(argv=None):
                 continue
             if source == "bioskills":
                 print("WARNING bioSkills was archived upstream in August 2026; no upstream fixes are expected")
+            if source == "stjude-cab":
+                print("WARNING St Jude CAB skills use CC BY-NC-SA 4.0; review noncommercial and share-alike terms before use")
             checkout = home / relative
             try:
                 update_source(checkout, upstream, args.preview, args.offline, args.repair_sources, args.install)

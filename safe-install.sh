@@ -22,8 +22,9 @@ Usage: bash safe-install.sh [OPTIONS]
   --repair-sources   Clone upstream before backing up legacy/dirty source trees
   --uninstall       Remove unchanged managed skills and shell block only
   --help, -h        Show help
-Fresh installs default to ECC; source choices persist. Existing checkouts and
-user-created/modified skills are preserved. Python dependencies use the isolated
+Defaults: ECC, AWS HCLS, OpenAI life-science research, and curated St Jude CAB.
+Source choices persist after the one-time research-default migration. Existing
+checkouts and user-created/modified skills are preserved. Dependencies use
 ~/.claude/skillweave-venv. --offline still needs dependencies already available.
 No harnesses, system packages or model weights are installed.
 HELP

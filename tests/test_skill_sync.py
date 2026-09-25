@@ -1,5 +1,6 @@
 """Consumer-visible propagation invariants; isolated HOME and local Git remotes."""
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -52,6 +53,12 @@ class SkillSyncTests(unittest.TestCase):
         self.source = self.home / ".claude-everything-claude-code/skills"
         self.source.mkdir(parents=True)
         self.all_harnesses = [arg for name in HARNESSES for arg in ("--harness", name)]
+        # Unrelated propagation tests use only their local source fixtures.
+        preferences = self.home / ".claude/skills-cache/source-preferences.json"
+        preferences.parent.mkdir(parents=True, exist_ok=True)
+        preferences.write_text(json.dumps({"research_defaults": True, "enabled": {
+            source: False for source in ("aws-hcls", "openai-life-sciences", "stjude-cab")
+        }}))
 
     def skill(self, root, name="example", body="Use measured evidence."):
         directory = root / name
@@ -294,6 +301,10 @@ class SkillSyncTests(unittest.TestCase):
         self.assertTrue(list(backups.glob("*/skillweave-backups/previous/old-backup/SKILL.md")))
 
     def test_curated_research_sources_preserve_resources_licenses_and_bioskills(self):
+        (self.home / ".claude/skills-cache/source-preferences.json").unlink()
+        selection = self.run_sync("--list-sources")
+        for source in ("aws-hcls", "openai-life-sciences", "stjude-cab"):
+            self.assertIn(f"{source}\tenabled\t", selection.stdout)
         self.skill(self.home / ".claude/skills-cache/bioskills-src", "bio-reference")
         aws = self.skill(self.home / ".claude-aws-hcls-skills/skills", "genomics-qc")
         (aws / "workflow.py").write_text("print('QC')")
@@ -307,8 +318,11 @@ class SkillSyncTests(unittest.TestCase):
         (cab / "AUTHORS.md").write_text("Upstream attribution")
         annotation = self.skill(cab, "genomic-regions-annotation")
         (annotation / "reference.bed").symlink_to(self.root / "institution-only.bed")
-        self.offline("--with-source", "aws-hcls", "--with-source", "openai-life-sciences",
-                     "--with-source", "stjude-cab")
+        # Upgrade the old installer's cached false defaults without selection flags.
+        (self.home / ".claude/skills-cache/source-preferences.json").write_text(json.dumps({
+            "enabled": {source: False for source in ("aws-hcls", "openai-life-sciences", "stjude-cab")}
+        }))
+        self.offline()
         target = self.home / HARNESSES["omp"]
         self.assertEqual((target / "genomics-qc/workflow.py").read_text(), "print('QC')")
         self.assertTrue((target / "evidence-query/SKILL.md").is_file())
@@ -320,6 +334,12 @@ class SkillSyncTests(unittest.TestCase):
         self.assertEqual((target / "custom-es-plot-gseapy/UPSTREAM-LICENSE.txt").read_text(), "CC BY-NC-SA 4.0")
         self.assertEqual((target / "custom-es-plot-gseapy/UPSTREAM-AUTHORS.md").read_text(), "Upstream attribution")
         self.assertIn("name: custom-ES-plot-GSEApy", (plot / "SKILL.md").read_text())
+        self.offline("--without-source", "aws-hcls", "--without-source", "openai-life-sciences",
+                     "--without-source", "stjude-cab")
+        self.offline()
+        for name in ("genomics-qc", "evidence-query", "custom-es-plot-gseapy"):
+            self.assertFalse((target / name).exists())
+        self.assertTrue((target / "bio-reference/SKILL.md").is_file())
 
     def test_active_omp_profile_controls_model_and_skill_destination(self):
         self.skill(self.source)

@@ -15,7 +15,7 @@ Usage: bash install.sh [OPTIONS]
   --with-bioskills / --without-bioskills Select GPTomics skills
   --with-huggingface / --without-huggingface  Focused Hugging Face skills
   --with-source ID / --without-source ID  Select any source from --list-sources
-                      First install defaults to ECC only; choices persist.
+                      Defaults: ECC, AWS HCLS, OpenAI life-science, St Jude CAB.
   --learn             Install isolated learning dependencies and extract skills
   --no-learn          Disable managed correction capture; skip extraction/dependencies
   --no-llm            Regex-only extraction when --learn is selected

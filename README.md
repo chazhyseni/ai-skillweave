@@ -24,16 +24,19 @@ system/global packages, harness binaries, model weights, or subscriptions.
 git clone https://github.com/chazhyseni/ai-skillweave
 cd ai-skillweave
 
-# Start with skills only; fresh installs select ECC.
-bash install.sh --only skills
+# Install defaults: ECC, AWS HCLS, OpenAI life-science research, and St Jude CAB.
+bash install.sh
 
 # Optional scientific, official, and local-model skill libraries.
 bash install.sh --only skills --with-science --with-bio --with-curated --with-huggingface
 ```
 
-Source choices persist. Existing recognized checkouts remain enabled unless
-explicitly disabled. bioSkills is available with `--with-bioskills`, but its
-upstream is archived. See the [source guide](docs/SKILLS-CATALOG.md).
+The three research complements are included by default; no selection flags are
+needed. Upgrading migrates their old cached disabled defaults once. Subsequent
+source choices persist, including explicit `--without-source ID` opt-outs.
+Other existing recognized checkouts keep their selections. bioSkills is available
+with `--with-bioskills`; existing selections are retained, but upstream is archived.
+St Jude's CC BY-NC-SA 4.0 restrictions still apply. See the [source guide](docs/SKILLS-CATALOG.md).
 
 Bare `bash install.sh` also configures harnesses already on `PATH`. To target
 one installed harness, use `--only claude|codex|openclaw|pi|copilot|hermes|omp`;

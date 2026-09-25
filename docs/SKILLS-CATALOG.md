@@ -1,7 +1,8 @@
 # Skill sources
 
-Fresh installs select ECC; existing source choices persist. Keep all libraries
-needed for your work available. Skill bodies are read on demand, but their
+Fresh installs select ECC, AWS HCLS, OpenAI life-science research and curated
+St Jude CAB skills. Keep all libraries needed for your work available.
+Skill bodies are read on demand, but their
 catalog metadata still consumes context—see the
 [cost and caching distinctions](../README.md#token-cost-and-automatic-selection).
 Counts change with upstream revisions, selection and name collisions; there is
@@ -109,13 +110,17 @@ not an automatic installation step. Pin tool/environment versions for
 reproducibility and validate commands, database APIs and scientific guidance
 against current primary documentation before use.
 
-These three complements are implemented as separate optional sources. Enable all
-three without disabling bioSkills:
+These three complements are installed by default, without disabling bioSkills:
 
 ```bash
-bash install.sh --with-source aws-hcls \
-  --with-source openai-life-sciences --with-source stjude-cab
+bash install.sh
 ```
+
+The first upgrade resets these three sources' old cached disabled values to the
+new enabled defaults. Earlier versions did not distinguish implicit defaults from
+explicit choices. Pass `--without-source ID` during that upgrade to keep a source
+disabled; opt-outs saved after migration persist across ordinary reinstalls.
+Other source selections are unchanged.
 
 | Source | Delivered selection and limits |
 |---|---|
