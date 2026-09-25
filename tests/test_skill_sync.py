@@ -219,13 +219,107 @@ class SkillSyncTests(unittest.TestCase):
         legacy = target / "old-folder"
         legacy.mkdir(parents=True)
         shutil.copy2(self.source / "old-folder/SKILL.md", legacy / "SKILL.md")
-        self.offline(expected=1)
-        self.assertFalse((target / "canonical").exists())
-        self.offline("--repair-conflicts")
+        before = snapshot(self.home)
+        self.offline("--dry-run")
+        self.assertEqual(snapshot(self.home), before)
+        self.offline()
         self.assertFalse(legacy.exists())
         self.assertIn("measured evidence", (target / "canonical/SKILL.md").read_text())
         self.assertEqual(list(target.glob("*/SKILL.md")), [target / "canonical/SKILL.md"])
         self.assertTrue(list((target.parent / "skillweave-backups").glob("*/old-folder/SKILL.md")))
+
+    def test_legacy_migration_is_per_skill_and_preserves_backups_on_incremental_updates(self):
+        self.skill(self.source, "first", "First current instructions")
+        self.skill(self.source, "second", "Second current instructions")
+        target = self.home / HARNESSES["omp"]
+        legacy = self.skill(target, "second", "Old instructions with personal changes")
+        (legacy / "notes.txt").write_text("Personal notes")
+        # Its old directory happens to be another desired skill's canonical name.
+        legacy.rename(target / "first")
+        self.skill(target, "personal-only", "Unrelated personal workflow")
+        self.offline()
+        self.assertIn("First current", (target / "first/SKILL.md").read_text())
+        self.assertIn("Second current", (target / "second/SKILL.md").read_text())
+        backups = list((target.parent / "skillweave-backups").glob("*/first"))
+        self.assertEqual(len(backups), 1)
+        self.assertIn("personal changes", (backups[0] / "SKILL.md").read_text())
+        self.assertEqual((backups[0] / "notes.txt").read_text(), "Personal notes")
+        self.assertIn("Unrelated personal", (target / "personal-only/SKILL.md").read_text())
+        self.skill(self.source, "first", "Incremental revision")
+        self.offline()
+        self.assertIn("Incremental revision", (target / "first/SKILL.md").read_text())
+        self.assertEqual(list((target.parent / "skillweave-backups").glob("*/first")), backups)
+        (target / "first/SKILL.md").write_text("Later personal edit")
+        self.offline(expected=1)
+        self.assertEqual((target / "first/SKILL.md").read_text(), "Later personal edit")
+
+    def test_learning_inputs_survive_legacy_descriptor_migration_and_second_sync(self):
+        source = self.skill(self.source)
+        learned = self.home / ".claude/skills/learned"
+        learned.mkdir(parents=True)
+        shutil.copy2(source / "SKILL.md", learned / "SKILL.md")
+        rule = self.skill(self.root / "personal-input", "personal-rule", "Retain this learned rule")
+        shutil.copy2(rule / "SKILL.md", learned / "personal-rule.md")
+        (learned / "events").mkdir()
+        (learned / "events/private.json").write_text('{"message":"private correction"}')
+        nested = self.skill(learned / "saved-input", "example", "Preserve nested learning input")
+        self.offline()
+        self.offline()
+        self.assertEqual((learned / "personal-rule.md").read_bytes(), (rule / "SKILL.md").read_bytes())
+        self.assertEqual((learned / "events/private.json").read_text(), '{"message":"private correction"}')
+        self.assertFalse((learned / "SKILL.md").exists())
+        self.assertTrue(list((self.home / ".claude/skillweave-backups").glob("SKILL.md-*/SKILL.md")))
+        self.assertIn("Preserve nested learning input", (nested / "SKILL.md").read_text())
+        for relative in HARNESSES.values():
+            self.assertIn("Retain this learned rule", (self.home / relative / "personal-rule/SKILL.md").read_text())
+
+    def test_nested_legacy_category_migrates_and_backups_stay_outside_native_discovery(self):
+        self.skill(self.source, "category", "New category skill")
+        self.skill(self.source, "child", "Current child")
+        target = self.home / HARNESSES["hermes"]
+        self.skill(target / "category", "child", "Legacy child")
+        (target / "category/notes.txt").write_text("Keep category notes")
+        self.skill(self.home / ".hermes/skills/skillweave-backups/previous", "old-backup")
+        before = snapshot(self.home)
+        self.offline("--dry-run")
+        self.assertEqual(snapshot(self.home), before)
+        self.offline()
+        self.assertIn("New category", (target / "category/SKILL.md").read_text())
+        self.assertIn("Current child", (target / "child/SKILL.md").read_text())
+        self.assertFalse((target / "category/child").exists())
+        self.assertFalse((self.home / ".hermes/skills/skillweave-backups").exists())
+        backups = self.home / ".hermes/skillweave-backups"
+        self.assertEqual(next(backups.glob("*/category/notes.txt")).read_text(), "Keep category notes")
+        self.assertIn("Legacy child", next(backups.glob("*/child/SKILL.md")).read_text())
+        self.assertTrue(list(backups.glob("*/skillweave-backups/previous/old-backup/SKILL.md")))
+
+    def test_curated_research_sources_preserve_resources_licenses_and_bioskills(self):
+        self.skill(self.home / ".claude/skills-cache/bioskills-src", "bio-reference")
+        aws = self.skill(self.home / ".claude-aws-hcls-skills/skills", "genomics-qc")
+        (aws / "workflow.py").write_text("print('QC')")
+        openai = self.home / ".claude-openai-life-sciences"
+        self.skill(openai / "plugins/life-science-research/skills", "evidence-query")
+        self.skill(openai / "plugins/unrelated/skills", "not-selected")
+        cab = self.home / ".claude-stjude-cab-skills"
+        plot = self.skill(cab, "custom-ES-plot-GSEApy")
+        (plot / "plot.py").write_text("print('GSEA')")
+        (cab / "LICENSE.txt").write_text("CC BY-NC-SA 4.0")
+        (cab / "AUTHORS.md").write_text("Upstream attribution")
+        annotation = self.skill(cab, "genomic-regions-annotation")
+        (annotation / "reference.bed").symlink_to(self.root / "institution-only.bed")
+        self.offline("--with-source", "aws-hcls", "--with-source", "openai-life-sciences",
+                     "--with-source", "stjude-cab")
+        target = self.home / HARNESSES["omp"]
+        self.assertEqual((target / "genomics-qc/workflow.py").read_text(), "print('QC')")
+        self.assertTrue((target / "evidence-query/SKILL.md").is_file())
+        self.assertTrue((target / "bio-reference/SKILL.md").is_file())
+        self.assertFalse((target / "not-selected").exists())
+        self.assertFalse((target / "genomic-regions-annotation").exists())
+        self.assertIn("name: custom-es-plot-gseapy", (target / "custom-es-plot-gseapy/SKILL.md").read_text())
+        self.assertEqual((target / "custom-es-plot-gseapy/plot.py").read_text(), "print('GSEA')")
+        self.assertEqual((target / "custom-es-plot-gseapy/UPSTREAM-LICENSE.txt").read_text(), "CC BY-NC-SA 4.0")
+        self.assertEqual((target / "custom-es-plot-gseapy/UPSTREAM-AUTHORS.md").read_text(), "Upstream attribution")
+        self.assertIn("name: custom-ES-plot-GSEApy", (plot / "SKILL.md").read_text())
 
     def test_active_omp_profile_controls_model_and_skill_destination(self):
         self.skill(self.source)

@@ -20,6 +20,9 @@ no fixed cross-harness skill total. No visibility filter is imposed by Skillweav
 | `tooluniverse` | [ToolUniverse](https://github.com/mims-harvard/ToolUniverse) | Drug discovery and scientific tools |
 | `sciagent` | [SciAgent](https://github.com/jaechang-hits/SciAgent-Skills) | Scientific analysis and research |
 | `deepmind` | [science-skills](https://github.com/google-deepmind/science-skills) | Scientific database and model workflows |
+| `aws-hcls` | [AWS HCLS](https://github.com/awslabs/hcls-agent-skills) | Genomics, single-cell, multi-omics and healthcare workflows; some need AWS services |
+| `openai-life-sciences` | [OpenAI life-science research](https://github.com/openai/plugins/tree/main/plugins/life-science-research) | Database/API research, entity resolution and evidence synthesis; separate from `openai/skills` |
+| `stjude-cab` | [St Jude CAB-aiSkills](https://github.com/stjudecab/CAB-aiSkills) | Genomic analysis, enrichment, visualization and reports; **CC BY-NC-SA 4.0** |
 | `bionemo` | [BioNeMo toolkit](https://github.com/NVIDIA-BioNeMo/bionemo-agent-toolkit) | NVIDIA life-science models and services |
 | `nature-paper` | [Nature-Paper](https://github.com/Boom5426/Nature-Paper-Skills) | Manuscript preparation and review |
 | `bipartite` | [Bipartite](https://github.com/matsen/bipartite) | Literature, manuscripts and research coordination |
@@ -87,16 +90,17 @@ bash scripts/update-ecc.sh --without-source medical
 bash scripts/update-ecc.sh --check
 ```
 
-`--with-curated` selects Anthropic and OpenAI. The installer also accepts paired
-`--with-`/`--without-` flags for science, bio, bioskills and huggingface. Choices
-persist; source checkouts are not deleted when disabled.
+`--with-curated` selects Anthropic and OpenAI's general skill collection. Both
+the installer and updater accept `--with-source ID` / `--without-source ID`.
+The paired science, bio, bioskills and huggingface shortcuts also remain available.
+Choices persist; source checkouts are not deleted when disabled.
 
 `--with-huggingface` installs `hf-cli`, `hf-mem`, `huggingface-local-models`,
 `huggingface-community-evals`, and `huggingface-datasets`, not its AWS/cloud
 training collection. [Microsoft skills](https://github.com/microsoft/skills)
 are useful selectively for Azure/Foundry projects, but are not bundled here.
 
-## Archived bioSkills and alternatives
+## bioSkills and curated research complements
 
 Keep bioSkills as an **optional reference library**, not an actively maintained
 dependency. Its [maintainers explicitly stopped updates and fixes](https://github.com/GPTomics/bioSkills#readme)
@@ -105,18 +109,25 @@ not an automatic installation step. Pin tool/environment versions for
 reproducibility and validate commands, database APIs and scientific guidance
 against current primary documentation before use.
 
-The reviewed collections below are outside Skillweave's current source registry:
+These three complements are implemented as separate optional sources. Enable all
+three without disabling bioSkills:
 
-| Collection | Assessment |
+```bash
+bash install.sh --with-source aws-hcls \
+  --with-source openai-life-sciences --with-source stjude-cab
+```
+
+| Source | Delivered selection and limits |
 |---|---|
-| [AWS HCLS agent skills](https://github.com/awslabs/hcls-agent-skills) | Strongest maintained complement reviewed: genomics QC, variant calling, RNA-seq, single-cell and healthcare workflows; MIT-0. Recent skill changes are visible in its [history](https://github.com/awslabs/hcls-agent-skills/commits/main/skills). Its coverage does not replace bioSkills' broader assembly, metagenomics, epigenomics and specialized workflows. AWS-specific skills need separate services/credentials. |
-| [OpenAI life-science research](https://github.com/openai/plugins/tree/main/plugins/life-science-research) | A separate collection from the configured `openai/skills` source. Useful for database/API research, entity resolution and evidence synthesis; not a replacement for local analysis pipelines. Check the plugin's own history, not just activity elsewhere in the parent repository. |
-| [St Jude CAB-aiSkills](https://github.com/stjudecab/CAB-aiSkills) | Focused executable skills for genomic regions, enrichment, plots and reporting. A complement, not a broad replacement; CC BY-NC-SA licensing needs review for commercial use and redistribution. |
+| `aws-hcls` | Published `skills/` tree, including supporting resources and upstream MIT-0 license. Complements bioSkills rather than replacing its assembly, metagenomics, epigenomics and specialized coverage. AWS-specific workflows require separate services and credentials. |
+| `openai-life-sciences` | Only `plugins/life-science-research/skills/`, not unrelated plugins or their hooks/MCP configuration. Useful for research and evidence workflows, not a replacement for local analysis pipelines. Review upstream distribution terms; repository availability is not a blanket redistribution license. |
+| `stjude-cab` | Skill directories and resources, with upstream license and author attribution copied alongside each payload. The mixed-case `custom-ES-plot-GSEApy` identity is normalized in the delivered copy only. `genomic-regions-annotation` is excluded because its bundled annotation links point outside the checkout to institutional data; workflows chaining that step require separately supplied annotations. **CC BY-NC-SA 4.0 restricts commercial use and requires attribution/share-alike compliance.** |
 
-**Decision:** retain bioSkills rather than silently trade away coverage. These
-alternatives are not automatically enabled or represented as scientifically
-validated replacements. The AWS collection's skill payloads and native OMP
-discovery were checked; its biological workflows and cloud services were not run.
+The reviewed revisions supplied 42 AWS, 50 OpenAI and 11 portable St Jude skill
+payloads before cross-source name priority. Counts may change upstream.
+Delivery and native discovery checks do not validate biological results, install
+scientific environments, or exercise external services. Keep tool/database
+versions pinned and validate each workflow for its actual data and environment.
 
 The [genomics skills directory](https://github.com/GoekeLab/awesome-genomic-skills)
 is useful for further discovery, but is a link collection, not an installable

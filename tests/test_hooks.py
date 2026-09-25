@@ -25,8 +25,8 @@ class HookTests(unittest.TestCase):
         self.settings = self.home / ".claude/settings.json"
         self.install()
 
-    def install(self):
-        result = subprocess.run(["bash", str(REPO / "scripts/setup-learning-hook.sh")],
+    def install(self, *args):
+        result = subprocess.run(["bash", str(REPO / "scripts/setup-hooks.sh"), *args],
                                 env=self.env, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
         return result
@@ -130,6 +130,22 @@ class HookTests(unittest.TestCase):
         self.assertIn("custom files preserved", result.stderr)
         self.assertIn("personal-hook", target.read_text())
         self.assertEqual(self.settings.read_bytes(), before)
+
+    def test_default_capture_opt_out_persists_and_preserves_events_and_custom_hooks(self):
+        self.invoke("UserPromptSubmit", prompt=RULE)
+        saved = self.events()
+        settings = json.loads(self.settings.read_text())
+        custom = {"type": "command", "command": "printf personal"}
+        settings["hooks"]["UserPromptSubmit"][0]["hooks"].append(custom)
+        self.settings.write_text(json.dumps(settings))
+        # An edited unrelated hook must not prevent the privacy opt-out.
+        runtime = self.home / ".claude/hooks/skillweave_hooks.py"
+        runtime.write_text(runtime.read_text() + "\n# Personal customization\n")
+        self.install("--no-learning")
+        self.install()
+        groups = json.loads(self.settings.read_text())["hooks"]["UserPromptSubmit"]
+        self.assertEqual([hook for group in groups for hook in group["hooks"]], [custom])
+        self.assertEqual(self.events(), saved)
 
     def extract(self):
         result = subprocess.run([sys.executable, str(REPO / "extract-conversation-skills.py"),

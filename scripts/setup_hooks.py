@@ -59,6 +59,20 @@ def matches(command, name):
             len(words) == 2 and words[0] in ("bash", "/bin/bash") and words[1] in paths)
 
 
+def unregister(hooks, names):
+    for event, groups in list(hooks.items()):
+        retained = []
+        for group in groups:
+            items = [item for item in group["hooks"]
+                     if not any(matches(item.get("command"), name) for name in names)]
+            if items or not group["hooks"]:
+                retained.append({**group, "hooks": items})
+        if retained:
+            hooks[event] = retained
+        else:
+            del hooks[event]
+
+
 def install(learning):
     settings_path = HOME / ".claude/settings.json"
     manifest_path = DEST / ".skillweave-manifest.json"
@@ -68,6 +82,9 @@ def install(learning):
             raise ValueError(f"Refusing symlinked hook configuration: {path}")
     settings = load_object(settings_path)
     owned = load_object(manifest_path)
+    if learning is None:
+        learning = owned.get("capture_enabled", True)
+    owned["capture_enabled"] = learning
     hooks = settings.setdefault("hooks", {})
     if not isinstance(hooks, dict):
         raise ValueError("settings.hooks must be an object")
@@ -79,8 +96,6 @@ def install(learning):
                 raise ValueError(f"Invalid hook group in {event}")
             if any(not isinstance(item, dict) for item in group["hooks"]):
                 raise ValueError(f"Invalid hook entry in {event}")
-            learning = learning or any(matches(item.get("command"), "learning-capture.sh")
-                                       for item in group["hooks"])
     selected = [name for name in HOOKS if learning or name != "learning-capture.sh"]
     files = ["skillweave_hooks.py", *selected]
     contents = {}
@@ -95,7 +110,12 @@ def install(learning):
             conflicts.append(str(target))
         contents[name] = source
     if conflicts:
-        print("Hooks unchanged; custom files preserved: " + ", ".join(conflicts), file=sys.stderr)
+        if not learning:
+            unregister(hooks, ("learning-capture.sh",))
+            atomic_write(settings_path, (json.dumps(settings, indent=2) + "\n").encode())
+            atomic_write(manifest_path, (json.dumps(owned, indent=2) + "\n").encode())
+        status = "Capture disabled; " if not learning else "Hook upgrade skipped; "
+        print(status + "custom files preserved: " + ", ".join(conflicts), file=sys.stderr)
         return
     DEST.mkdir(parents=True, exist_ok=True)
     for name, content in contents.items():
@@ -104,18 +124,7 @@ def install(learning):
             atomic_write(target, content, 0o755 if name.endswith(".sh") else 0o600)
         owned[name] = digest(content)
     # Remove only recognized registrations, retaining other hooks in shared groups.
-    for event, groups in list(hooks.items()):
-        retained = []
-        for group in groups:
-            items = [item for item in group["hooks"]
-                     if not any(matches(item.get("command"), name)
-                                for name in (*selected, "session-reflection.sh"))]
-            if items or not group["hooks"]:
-                retained.append({**group, "hooks": items})
-        if retained:
-            hooks[event] = retained
-        else:
-            del hooks[event]
+    unregister(hooks, (*HOOKS, "session-reflection.sh"))
     for name in selected:
         event, matcher = HOOKS[name]
         group = {"hooks": [{"type": "command", "command": shlex.quote(str(DEST / name)), "timeout": 5}]}
@@ -131,7 +140,11 @@ def install(learning):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--learning", action="store_true", help="Opt in to local correction capture")
+    capture = parser.add_mutually_exclusive_group()
+    capture.add_argument("--learning", dest="learning", action="store_true", default=None,
+                         help="Enable local correction capture (default)")
+    capture.add_argument("--no-learning", dest="learning", action="store_false",
+                         help="Remove managed capture registrations; preserve saved events")
     args = parser.parse_args()
     try:
         install(args.learning)

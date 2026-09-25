@@ -46,9 +46,10 @@ Open a new Bash/Zsh shell afterward to load the helper aliases.
 | `--offline` | No source fetches; initial Python dependency setup may still need network |
 | `--repair-sources` | Clone upstream first, then back up and replace legacy/dirty source trees |
 | `--repair-conflicts` | Back up differing destination skills before replacing them |
+| `--with-source ID` / `--without-source ID` | Persistently select or disable a source from the [catalog](docs/SKILLS-CATALOG.md) |
 | `--with-ruflo` | Also install/reuse the opt-in Ruflo CLI; no project initialization or MCP registration |
-| `--learn` | Opt in to learning dependencies and extraction; requires the skills layer |
-| `--no-learn` | Skip learning setup/extraction (default) |
+| `--learn` | Enable capture and explicitly install learning dependencies/run extraction; requires the skills layer |
+| `--no-learn` | Disable Claude capture persistently when configuring Claude; do not run extraction |
 | `--verify` | Read-only diagnostics |
 | `--uninstall` | Remove unchanged managed skills and shell blocks; preserve user data, source clones, environments and harness configs |
 
@@ -98,12 +99,17 @@ copies. See [recovery and pip-index guidance](docs/TROUBLESHOOTING.md).
   not upstream folder names. This prevents duplicate-name shadowing.
 - Content fingerprints govern updates and pruning—not modification times.
 - Identical legacy copies are adopted; missing supporting files are filled in.
-- Personal files, unmanaged skills and edited managed files are preserved by
-  default. A conflicting asset blocks updates to its entire skill, preventing
-  new instructions from being paired with stale scripts.
-- `--repair-conflicts` explicitly backs up differing copies and legacy aliases
-  outside discovery before replacement. Personal additions remain in the backup,
-  not in the replacement skill. Backups are never automatically deleted.
+- Recognized unowned legacy copies and duplicate-name aliases are migrated
+  automatically, per skill: back up differing content, then install the canonical
+  payload. This also handles nested legacy categories; it is not a whole-tree reset.
+- Unrelated personal skills and later edits to fingerprint-owned files stay
+  active. A conflicting asset blocks its entire skill, avoiding mixed versions.
+- `--repair-conflicts` explicitly backs up and replaces those remaining conflicts.
+  Personal additions to migrated skills remain in the backup, not the replacement.
+  Backups stay outside native discovery and are never automatically deleted.
+- Learning input and state under `~/.claude/skills/learned/` are reserved, not
+  disposable delivery output. An obsolete duplicate `SKILL.md` there is backed
+  up separately without moving rules, archives or captured events.
 - Conflicts return nonzero; per-harness counts distinguish ownership records
   from successful delivery. `--no-prune` postpones ordinary removals.
 - Failed/missing sources retain their previously delivered skills. Explicit
@@ -112,8 +118,8 @@ copies. See [recovery and pip-index guidance](docs/TROUBLESHOOTING.md).
 Ownership and source selections are stored under `~/.claude/skills-cache/`.
 Old copied repositories without `.git` need a deliberate backup/reclone to
 update; `--offline` can continue delivering their existing snapshots. Old
-name-only manifests cannot prove ownership; differing copies need the explicit
-backup-and-replace recovery above.
+name-only manifests cannot prove ownership; recognized legacy copies are backed
+up before replacement. Later installs use fingerprints, not repeated fresh installs.
 
 ## Native harness paths
 
@@ -210,7 +216,15 @@ covers isolated Claude and Hermes launchers that leave normal provider settings
 unchanged. Skillweave supplies the skills; litMoE can supply the model-serving
 layer. Installation and model downloads remain separate and explicit.
 
-## Optional learning
+## Default capture and explicit learning
+
+Normal Claude setup enables lightweight local correction capture. No model,
+downloads or extraction job runs merely because capture is enabled.
+`bash install.sh --no-learn` disables capture and remembers that choice; ordinary
+reinstallation respects it. Re-enable capture alone with
+`bash scripts/setup-learning-hook.sh`.
+
+History extraction remains an explicit action:
 
 ```bash
 bash install.sh --only skills --learn --no-llm
@@ -232,19 +246,18 @@ LLM mode uses one explicit backend, with no automatic cloud fallback.
 
 Aliases: `learn-sync`, `learn-sync-dry`, `learn-stats`, `learn-prune`,
 `skills-update`. Installed helpers live under `~/.claude/scripts/`.
-Claude learning hooks are opt-in; `--no-learn` does not remove older hooks.
+Capture and extraction are separate: this is not an autonomous skill-refinement loop.
 
 ### Claude hooks
 
-`bash scripts/setup-hooks.sh` installs the search hooks. Opt in to local prompt
-capture with `bash scripts/setup-learning-hook.sh` (also enabled by the main
-installer's `--learn` path when Claude is selected).
+`bash scripts/setup-hooks.sh` installs search hooks and correction capture,
+unless capture was previously disabled. It preserves unrelated custom hooks.
 
 | Event | Behavior |
 |---|---|
 | `PreToolUse` (`Glob\|Grep`) | One reminder before broad searches in a Codesight-indexed project with a registered Codesight server |
 | `PostToolUse` (Codesight summary) | Suppress that reminder after a successful summary |
-| `UserPromptSubmit` (opt-in) | Save candidate corrections/preferences locally without echoing them into model context |
+| `UserPromptSubmit` (default) | Save candidate corrections/preferences locally without echoing them into model context |
 | `SessionEnd` | Remove that session's search-reminder state |
 
 Hooks use Python's standard library: no inference, model downloads, or network

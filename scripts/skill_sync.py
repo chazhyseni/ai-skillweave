@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 from pathlib import Path
 import stat
@@ -12,7 +13,7 @@ import sys
 import tempfile
 
 from skill_sanitize import sanitize_skill_md, skill_name
-from skill_delivery import atomic_write, sync_root
+from skill_delivery import atomic_write, backup_conflict, sync_root
 from harness_paths import omp_agent_dirs
 
 # Low to high priority, matching the historical cross-harness source ordering.
@@ -28,6 +29,9 @@ SOURCES = (
     ("bionemo", ".claude-bionemo-skills", "NVIDIA-BioNeMo/bionemo-agent-toolkit", ("skills/bionemo-agent-toolkit/skills", ".")),
     ("nature-paper", ".claude-nature-paper-skills", "Boom5426/Nature-Paper-Skills", ("skills",)),
     ("deepmind", ".claude-deepmind-skills", "google-deepmind/science-skills", ("skills",)),
+    ("aws-hcls", ".claude-aws-hcls-skills", "awslabs/hcls-agent-skills", ("skills",)),
+    ("openai-life-sciences", ".claude-openai-life-sciences", "openai/plugins", ("plugins/life-science-research/skills",)),
+    ("stjude-cab", ".claude-stjude-cab-skills", "stjudecab/CAB-aiSkills", (".",)),
     ("huggingface", ".claude-huggingface-skills", "huggingface/skills", ("skills",)),
     ("anthropic", ".claude-curated-skills/anthropic-official", "anthropics/skills", ("skills",)),
     ("bio", ".claude-clawbio-skills", "ClawBio/ClawBio", ("skills",)),
@@ -183,6 +187,30 @@ def payload(path: Path):
     return result
 
 
+def curated_payload(source: str, checkout: Path, skill: Path):
+    """Apply explicit portability decisions without changing upstream checkouts."""
+    if source == "stjude-cab" and skill.name == "genomic-regions-annotation":
+        print("CURATED OUT stjude-cab/genomic-regions-annotation: institution-specific external annotation symlinks")
+        return None
+    files = payload(skill)
+    if source == "stjude-cab" and skill.name == "custom-ES-plot-GSEApy":
+        name = "custom-es-plot-gseapy"
+        text, mode = files["SKILL.md"]
+        text, changed = re.subn(rb"(?m)^name: custom-ES-plot-GSEApy\r?$",
+                               b"name: custom-es-plot-gseapy", text, count=1)
+        if not changed:
+            name = skill_name(skill / "SKILL.md")
+        files["SKILL.md"] = (text, mode)
+    else:
+        name = skill_name(skill / "SKILL.md")
+    if source in ("aws-hcls", "openai-life-sciences", "stjude-cab"):
+        for original, destination in (("LICENSE", "UPSTREAM-LICENSE"), ("LICENSE.txt", "UPSTREAM-LICENSE.txt"),
+                                      ("AUTHORS.md", "UPSTREAM-AUTHORS.md")):
+            if (checkout / original).is_file():
+                files[destination] = ((checkout / original).read_bytes(), 0o644)
+    return name, files
+
+
 
 
 
@@ -301,8 +329,10 @@ def main(argv=None):
                 if source == "bioskills" and categories and skill.relative_to(root).parts[0] not in categories:
                     continue
                 try:
-                    name = skill_name(skill / "SKILL.md")
-                    content = payload(skill)
+                    curated = curated_payload(source, checkout, skill)
+                    if curated is None:
+                        continue
+                    name, content = curated
                     if name in desired:
                         print(f"PRIORITY {name}: {source} overrides {desired[name][0]}")
                     desired[name] = (source, skill, content)
@@ -321,6 +351,7 @@ def main(argv=None):
                 print(f"ERROR {exc}", file=sys.stderr)
                 errors += 1
     roots = harness_roots(home)
+    args.input_roots = {home / ".claude/skills/learned"}
     # Retire only fingerprint-owned legacy Codex copies; old name-only manifests
     # cannot prove ownership or local edits and are deliberately not pruned.
     legacy_codex = home / ".codex/skills"
@@ -356,6 +387,11 @@ def main(argv=None):
             if not args.preview:
                 root.mkdir(parents=True, exist_ok=True)
             records = destinations.setdefault(str(root), {})
+            args.backup_root = (home / ".hermes" if harness == "hermes" else root.parent) / "skillweave-backups"
+            if harness == "hermes":
+                legacy_backups = root.parent / "skillweave-backups"
+                if legacy_backups.exists() or legacy_backups.is_symlink():
+                    backup_conflict(legacy_backups, args)
             root_errors = sync_root(root, desired, records, protected, args)
             errors += root_errors
             print(f"{harness}: {len(records)} ownership records, {root_errors} conflicting skill(s) at {root}")

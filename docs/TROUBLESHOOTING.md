@@ -43,38 +43,48 @@ source changes are reset or merged automatically.
 
 Explicit `scripts/update-ecc.sh` updates remain strict: they refuse to refresh
 dirty/snapshot sources unless you select offline use or backup-first recovery.
-Edited/unmanaged destination skills are protected independently. Identical legacy
-copies are adopted automatically; a destination conflict leaves its entire skill
-unchanged, including assets, and returns nonzero.
+Destination migration is independent: identical legacy copies are adopted;
+recognized unowned copies and duplicate-name aliases are backed up and
+canonicalized automatically. Later edits to fingerprint-owned skills and
+unrelated personal skills remain protected. A remaining conflict blocks its
+entire skill, including assets, and returns nonzero.
 
 For a legacy install with hundreds of conflicts, do not delete your skills tree.
 Use the repository scripts (rather than an older installed `skills-update` alias):
 
 ```bash
-# Restrict diagnosis and recovery to OMP; no source fetches.
-bash scripts/setup-omp-skills.sh --repair-conflicts --dry-run
-bash scripts/setup-omp-skills.sh --repair-conflicts
-bash scripts/verify-omp.sh
+# Preview all detected destinations, then migrate without source fetches.
+bash scripts/update-ecc.sh --offline --dry-run
+bash install.sh --offline
 ```
 
-Explicit repair moves each differing skill or duplicate-name legacy alias into a
-unique `skillweave-backups/<skill>-<random>/<skill>/` directory beside the skills
-root, then installs the selected source. **Personal additions move into that
-backup too.** Nothing is discarded; backups are retained indefinitely and are
-outside native discovery. To restore one, first move the new skill aside, then
-move the saved directory back to its original path. The next ordinary sync will
-report differing restored content rather than overwrite it.
+Migration is **per skill**, not a global first-install flag or a repeated fresh
+install. Missing skills are installed, identical copies adopted, and recognized
+unowned legacy identities backed up before replacement. This includes flat
+aliases and nested legacy categories. Subsequent installs compare fingerprints.
 
-Use `--harness NAME` with `update-ecc.sh` for other harnesses, or omit it only
-when you intend recovery across all detected destinations. Review every printed
-backup path. Symlink targets are not modified. Recovery does not reset source
-repositories or repair malformed upstream frontmatter.
+Backups use unique `skillweave-backups/<skill>-<random>/<skill>/` directories.
+They sit beside the delivery root, except Hermes uses
+`~/.hermes/skillweave-backups/` to stay outside recursive native discovery.
+**Personal additions to a migrated skill move into its backup too.** Backups
+are retained indefinitely; symlink targets are not modified.
+To restore one, first move the new skill aside, then restore the saved entry.
+Restored unowned aliases can trigger migration again; integrate desired changes
+into the canonical managed copy or selected source before the next sync.
 
-`602 managed skills` was an ownership-record count, not a native-loader success
-count. The final error count covered **all sources and harnesses**. Output now
-reports each harness's conflicting-skill count separately. OMP resolves the
-frontmatter `name`, not the folder name; old copies with different folders but
-identical declared names can shadow the selected version until alias recovery.
+`~/.claude/skills/learned/` is input/state storage, not replaceable output.
+A stale duplicate `SKILL.md` inside that container is backed up separately;
+learned rules, archives and captured events stay in place.
+
+Use `--repair-conflicts` only when you deliberately want backup-and-replacement
+of remaining edited/unknown conflicts. Restrict it with `--harness NAME` on
+`scripts/update-ecc.sh`, or omit that selector to cover all detected destinations.
+Review printed backup paths. Destination migration neither resets source
+repositories nor repairs arbitrary malformed upstream frontmatter.
+
+Ownership-record counts do not certify native loading. The final error count
+covers **all sources and harnesses**: a healthy OMP line can coexist with errors
+in Claude, OpenClaw, Pi or Hermes. Per-harness conflict counts identify which.
 
 To replace legacy/dirty sources with current canonical upstream copies:
 
@@ -97,8 +107,8 @@ The source and destination recovery flags are separate. Source repair requires
 online skills installation/update, not `--offline`, uninstall or a target-only
 harness install. Ordinary later installs do not create another source backup
 unless the source becomes modified again and explicit repair is requested.
-`--no-prune` postpones ordinary removals, but explicit `--repair-conflicts` still
-backs up conflicting aliases before replacing them.
+`--no-prune` postpones ordinary removals, not canonical-identity migration or
+explicit backup-and-replacement with `--repair-conflicts`.
 
 bioSkills is archived. Disable it with `--without-bioskills` if you do not want
 that reference snapshot.

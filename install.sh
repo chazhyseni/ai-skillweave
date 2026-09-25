@@ -14,9 +14,10 @@ Usage: bash install.sh [OPTIONS]
   --with-bio / --without-bio             Select ClawBio skills
   --with-bioskills / --without-bioskills Select GPTomics skills
   --with-huggingface / --without-huggingface  Focused Hugging Face skills
+  --with-source ID / --without-source ID  Select any source from --list-sources
                       First install defaults to ECC only; choices persist.
   --learn             Install isolated learning dependencies and extract skills
-  --no-learn          Skip learning dependencies, extraction and hooks (default)
+  --no-learn          Disable managed correction capture; skip extraction/dependencies
   --no-llm            Regex-only extraction when --learn is selected
   --offline          Propagate existing checkouts without fetching
   --repair-conflicts Back up conflicting skill copies before replacing them
@@ -33,9 +34,10 @@ Usage: bash install.sh [OPTIONS]
 No system/global packages, harness binaries, models or subscriptions are installed.
 Install chosen harnesses yourself. --only ruflo / --with-ruflo opts into user-local npm packages.
 Skills require git and Python 3 with venv/pip; dependencies use ~/.claude/skillweave-venv.
+Claude configuration enables local correction capture by default; no model is called.
 HELP
 }
-ONLY=""; SKIP_SKILLS=false; LEARN=false; ACTION=install; RUFLO=false
+ONLY=""; SKIP_SKILLS=false; LEARN=false; CAPTURE=""; ACTION=install; RUFLO=false
 SKILL_ARGS=(); MODEL_ARGS=(); BACKEND=""; MODEL_REQUESTED=false
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -56,10 +58,13 @@ while [ "$#" -gt 0 ]; do
             esac
             shift 2 ;;
         --allow-remote) export SKILLWEAVE_LLM_ALLOW_REMOTE=1; MODEL_ARGS+=("$1"); MODEL_REQUESTED=true; shift ;;
+        --with-source|--without-source)
+            [ "$#" -ge 2 ] && [ -n "$2" ] && [[ "$2" != --* ]] || error "$1 requires a source ID"
+            SKILL_ARGS+=("$1" "$2"); shift 2 ;;
         --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--offline|--no-llm|--repair-conflicts|--repair-sources)
             SKILL_ARGS+=("$1"); shift ;;
-        --learn) LEARN=true; shift ;;
-        --no-learn) LEARN=false; shift ;;
+        --learn) LEARN=true; CAPTURE=true; shift ;;
+        --no-learn) LEARN=false; CAPTURE=false; shift ;;
         --skip-skills) SKIP_SKILLS=true; shift ;;
         --with-ruflo) RUFLO=true; shift ;;
         --uninstall|--verify) [ "$ACTION" = install ] || error 'Choose only one action'; ACTION="${1#--}"; shift ;;
@@ -126,8 +131,10 @@ if selected claude; then
         printf 'Claude MCP setup skipped: run Claude Code once, then use --only claude.\n'
     fi
     bash "$REPO_DIR/scripts/setup-claude-md.sh"
-    bash "$REPO_DIR/scripts/setup-hooks.sh"
-    if $LEARN; then bash "$REPO_DIR/scripts/setup-learning-hook.sh"; fi
+    HOOK_ARGS=()
+    if [ "$CAPTURE" = false ]; then HOOK_ARGS+=(--no-learning); fi
+    if [ "$CAPTURE" = true ]; then HOOK_ARGS+=(--learning); fi
+    bash "$REPO_DIR/scripts/setup-hooks.sh" "${HOOK_ARGS[@]}"
 fi
 if selected copilot; then
     require_harness copilot

@@ -12,6 +12,7 @@ Usage: bash safe-install.sh [OPTIONS]
   --with-bioskills / --without-bioskills GPTomics (archived upstream)
   --with-huggingface / --without-huggingface  Focused Hugging Face skills
   --curated-only      Disable ECC; enable curated sources
+  --with-source ID / --without-source ID  Select any registered source
   --offline          Propagate existing checkouts, no git/network fetch
   --learn            Opt in to learning dependencies and extraction
   --no-learn         No learning dependencies/extraction (default)
@@ -30,6 +31,9 @@ HELP
 LEARN=false; UNINSTALL=false; NO_LLM=false; ARGS=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --with-source|--without-source)
+            [ "$#" -ge 2 ] && [ -n "$2" ] && [[ "$2" != --* ]] || error "$1 requires a source ID"
+            ARGS+=("$1" "$2"); shift 2 ;;
         --with-science|--without-science|--with-curated|--without-curated|--with-bio|--without-bio|--with-bioskills|--without-bioskills|--with-huggingface|--without-huggingface|--with-ecc|--without-ecc|--offline|--repair-conflicts|--repair-sources)
             ARGS+=("$1"); shift ;;
         --curated-only) ARGS+=(--without-ecc --with-curated); shift ;;

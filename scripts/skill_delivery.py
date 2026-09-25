@@ -58,7 +58,7 @@ def backup_conflict(target: Path, args):
     if args.preview:
         print(f"WOULD BACK UP {target} outside the skills root before replacement")
         return
-    backup_root = target.parent.parent / "skillweave-backups"
+    backup_root = getattr(args, "backup_root", target.parent.parent / "skillweave-backups")
     if backup_root.is_symlink():
         raise ValueError(f"Refusing symlinked backup directory: {backup_root}")
     backup_root.mkdir(parents=True, exist_ok=True)
@@ -86,27 +86,82 @@ def matching_copy(target: Path, expected: dict):
     return existing if "SKILL.md" in existing else None
 
 
+def legacy_identity(target: Path, name: str) -> bool:
+    """Recognize a colliding skill, never an arbitrary personal directory."""
+    if target.is_symlink() and not target.exists():
+        return True
+    try:
+        return skill_name(target / "SKILL.md") == name
+    except (OSError, ValueError):
+        return False
+
+
+def installed_skill_files(root: Path, input_roots: set):
+    """Find legacy skills without descending into assets or learning inputs."""
+    if not root.is_dir():
+        return
+    pending = [root]
+    while pending:
+        for entry in sorted(pending.pop().iterdir()):
+            if entry.name.startswith(".") or not entry.is_dir():
+                continue
+            candidate = entry / "SKILL.md"
+            if candidate.is_file():
+                yield candidate
+            elif not entry.is_symlink() and entry not in input_roots:
+                pending.append(entry)
+
+
 def sync_root(root: Path, desired: dict, records: dict, protected: set, args) -> int:
     conflicts = 0
     aliases = {}
-    for candidate in root.glob("*/SKILL.md"):
-        if candidate.parent.name in desired:
-            continue
+    containers, unknown_containers = set(), set()
+    input_roots = getattr(args, "input_roots", set())
+    for candidate in installed_skill_files(root, input_roots):
+        parts = candidate.parent.relative_to(root).parts
         try:
             declared = skill_name(candidate)
         except (OSError, ValueError):
+            if len(parts) > 1:
+                unknown_containers.add(parts[0])
             continue
-        if declared in desired and candidate.parent.name != declared:
+        if candidate.parent in input_roots:
+            # Old extraction wrote a stray descriptor beside the input corpus.
+            # Archive that descriptor only; never move histories or learned rules.
+            if declared in desired and candidate.parent != root / declared:
+                backup_conflict(candidate, args)
+            continue
+        if len(parts) > 1:
+            (containers if declared in desired else unknown_containers).add(parts[0])
+        if declared in desired and candidate.parent != root / declared:
             aliases.setdefault(declared, []).append(candidate.parent)
-    alias_names = {path.name for paths in aliases.values() for path in paths}
+    containers -= unknown_containers
+    vacated = set()
+    blocked = set()
+    for declared, paths in aliases.items():
+        for alias in paths:
+            if alias.parent == root and alias.name in records and not getattr(args, "repair_conflicts", False):
+                print(f"CONFLICT {alias}: recorded identity changed; review --repair-conflicts", file=sys.stderr)
+                conflicts += 1
+                blocked.update((alias.name, declared))
+                continue
+            backup_conflict(alias, args)
+            if alias.parent == root:
+                records.pop(alias.name, None)
+                vacated.add(alias.name)
     for name in sorted(set(desired) | set(records)):
         if len(safe_relative(name).parts) != 1:
             raise ValueError(f"Invalid skill directory in manifest: {name!r}")
+        if name in blocked:
+            continue
         target = root / name
         old = records.get(name)
         wanted = desired.get(name)
-        if name in alias_names:
-            continue  # Handle legacy aliases with their canonical skill below.
+        if target in input_roots:
+            if wanted:
+                print(f"CONFLICT {target}: reserved learning input directory preserved", file=sys.stderr)
+                conflicts += 1
+            continue
         if old and old.get("source") in protected and (wanted is None or wanted[0] != old["source"]):
             print(f"PRESERVED {target}: source unavailable")
             continue
@@ -114,9 +169,12 @@ def sync_root(root: Path, desired: dict, records: dict, protected: set, args) ->
             continue
         files = wanted[2] if wanted else {}
         expected = {rel: fingerprint(*item) for rel, item in files.items()}
-        replacing = False
+        replacing = name in vacated
+        legacy = old is None and wanted is not None and (name in containers or legacy_identity(target, name))
         problems = []
-        if target.is_symlink():
+        if replacing:
+            old = None
+        elif target.is_symlink():
             if wanted and target.resolve() == wanted[1].resolve():
                 replacing = True
                 old = None
@@ -144,15 +202,8 @@ def sync_root(root: Path, desired: dict, records: dict, protected: set, args) ->
                     problems.append(f"{relative}: locally edited")
                 elif previous is None and present:
                     problems.append(f"{relative}: unowned file")
-        current_aliases = [path for path in aliases.get(name, []) if path.exists() or path.is_symlink()]
-        if current_aliases and not getattr(args, "repair_conflicts", False):
-            problems.append("duplicate declared name in " + ", ".join(str(path) for path in current_aliases))
-        elif current_aliases:
-            for alias in current_aliases:
-                backup_conflict(alias, args)
-                records.pop(alias.name, None)
         if problems:
-            if wanted and getattr(args, "repair_conflicts", False):
+            if wanted and (legacy or getattr(args, "repair_conflicts", False)):
                 backup_conflict(target, args)
                 replacing = True
                 old_files = {}
@@ -161,7 +212,7 @@ def sync_root(root: Path, desired: dict, records: dict, protected: set, args) ->
                       "Review --repair-conflicts --dry-run for backup-and-replace recovery.", file=sys.stderr)
                 conflicts += 1
                 continue
-        elif replacing and not args.preview:
+        elif replacing and not args.preview and target.is_symlink():
             target.unlink()  # Source-directory symlink only; its target is untouched.
         retained = dict(old_files)
         for relative in sorted(set(files) | set(old_files)):
